@@ -1,0 +1,6 @@
+Models: Apollo Lunar Module (apollo_lm), Nova-C (nova_c)
+URL: https://github.com/alexmaietta/lunar-surface-mobility-assets (release assets, glTF zips; also mk1, mk2, blue_ghost, peregrine, rovers available there)
+Author: Alex Maietta (Blender-built from public references, not official CAD)
+Licence: CC0 1.0 (LICENSE and NOTICE in each folder). Credit appreciated, not required. Not endorsed by NASA/Intuitive Machines.
+Processing: Blender 5.2 (Tools/WebModels/glb_to_fbx.py): origin bottom-centre, Z up, metres, textures downscaled to 1024, FBX in fbx/. No geometry edited.
+Also extracted (sub-assemblies of the same GLBs by object-name prefix, ONLY_PREFIX in the script): ApolloDPS_Engine (dps*, Apollo descent engine), NovaC_VR900_Engine (vr900*), BlueEngine_BE7 (be7* from mk1, Blue Origin BE-7 class). Not imported: mk1, mk2 (Blue Moon), blue_ghost, peregrine, rovers (same repo, same CC0 licence).

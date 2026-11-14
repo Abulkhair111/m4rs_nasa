@@ -29,6 +29,8 @@
 #include "MCRocketStack.generated.h"
 
 class AMCPartSocket;
+class AMCConstructionManager;
+class UMCRocketPreset;
 class USceneComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -107,8 +109,31 @@ struct FMCStackVisual
 	int32 Copy = 0;
 	bool bGhost = false;
 	bool bLander = false;
+	/** Launcher-preset hardware (no socket). */
+	bool bPreset = false;
 	FVector Target = FVector::ZeroVector;
 	FVector Cur = FVector::ZeroVector;
+};
+
+/** A removed piece lifting out before it is destroyed (swap animation). */
+USTRUCT()
+struct FMCLeavingVisual
+{
+	GENERATED_BODY()
+
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Comp = nullptr;
+	FVector Cur = FVector::ZeroVector;
+	FVector Target = FVector::ZeroVector;
+	float TimeLeft = 0.f;
+};
+
+/** Result of aiming at a drawn stack piece. Socket is null for launcher-preset hardware. */
+struct FMCStackHit
+{
+	AMCPartSocket* Socket = nullptr;
+	const UMCPartDef* Def = nullptr;
+	bool bPreset = false;
+	float Dist = 0.f;
 };
 
 UCLASS(Blueprintable)
@@ -122,12 +147,22 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** The stack of this world (first found). Null if none is placed. */
+	/** The REAL stack of this world (first non-display one). Null if none is placed. */
 	static AMCRocketStack* Find(const UWorld* World);
+	/** The wall display stack (bDisplayMode), or null. */
+	static AMCRocketStack* FindDisplay(const UWorld* World);
 
 	/** Translucent preview of a candidate at the slot where it would be installed (local, not replicated). Lander-group defs are ignored. */
 	UFUNCTION(BlueprintCallable, Category = "Rocket Stack") void ShowGhost(const UMCPartDef* Def);
+	/** Swap preview: the ghost REPLACES the part installed in this socket (call before ShowGhost). ClearGhost resets it. */
+	UFUNCTION(BlueprintCallable, Category = "Rocket Stack") void SetGhostReplaces(AMCPartSocket* Socket);
 	UFUNCTION(BlueprintCallable, Category = "Rocket Stack") void ClearGhost();
+
+	/**
+	 * Aim test against the drawn pieces (real parts only: ghost and lander are skipped). The nearest hit along the ray wins.
+	 * Each piece is tagged with its socket (the slot it came from), so the character can open the picker for it.
+	 */
+	bool TracePart(const FVector& Eye, const FVector& Dir, float MaxDist, FMCStackHit& Out) const;
 	/** Force a rebuild next tick (after changing properties in a Blueprint). */
 	UFUNCTION(BlueprintCallable, Category = "Rocket Stack") void MarkDirty() { bDirty = true; }
 
@@ -152,6 +187,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") bool bHideSocketPartActors = true;
 	/** Translucent material for the ghost. Defaults to an engine debug material; if it cannot load the ghost pulses instead. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") TSoftObjectPtr<UMaterialInterface> GhostMaterial;
+
+	// ---- Wall display / swap animation ----
+	/**
+	 * Wall display mode: this actor mirrors the real stack (same sockets, same launcher preset, same ghost) at a small scale, so players see
+	 * the whole rocket from anywhere in the hall. Place a second AMCRocketStack on the wall/pedestal, tick this, set DisplayScale ~0.08 and
+	 * MaxStackHeightCm ~700. Aiming at its pieces works like the real stack (E = swap). Empty LanderMesh is copied from the real stack.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") bool bDisplayMode = false;
+	/** Removed pieces lift out and the new ones lower in (otherwise removed pieces vanish at once). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") bool bAnimateSwap = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") float LiftOutHeightCm = 1500.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") float LiftOutTimeSec = 0.9f;
+	/** Max distance at which pieces of this stack can be aimed at, cm (the display is meant to be used from afar). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display") float AimRangeCm = 3000.f;
 
 	/** Height/radius used for a part that has no mesh and no StackHeightCm / StackRadiusCm (a gap, never an invented mesh). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fallback") float EmptyPartHeightCm = 150.f;
@@ -183,6 +232,11 @@ private:
 		const UMCPartDef* Def = nullptr;
 		AMCPartSocket* Socket = nullptr;
 		bool bGhost = false;
+		bool bPreset = false;
+		/** Preset core ordering (bottom first). */
+		int32 Order = 0;
+		/** Radial copies; 0 = the def's RadialCount. */
+		int32 Count = 0;
 	};
 
 	struct FGeom
@@ -205,11 +259,19 @@ private:
 	void Rebuild();
 	void ApplyVisual(FMCStackVisual& V, UStaticMesh* Mesh, const FVector& Scale, const FRotator& Rot);
 	void HideSocketActors();
+	const UMCPartDef* EffGhost() const;
+	AMCPartSocket* EffGhostReplaces() const;
+	const UMCRocketPreset* EffPreset() const;
 
 	UPROPERTY() TArray<FMCStackVisual> Visuals;
+	UPROPERTY() TArray<FMCLeavingVisual> Leaving;
 	TArray<TWeakObjectPtr<AMCPartSocket>> CachedSockets;
 	TArray<const void*> LastSignature;
 	TWeakObjectPtr<const UMCPartDef> Ghost;
+	TWeakObjectPtr<AMCPartSocket> GhostReplaces;
+	/** Display mode: the real stack being mirrored. */
+	TWeakObjectPtr<AMCRocketStack> Source;
+	TWeakObjectPtr<AMCConstructionManager> Mgr;
 	float SocketCacheTimer = 0.f;
 	float RealHeightCm = 0.f;
 	float TotalHeightCm = 0.f;

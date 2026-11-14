@@ -52,6 +52,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Rocket") float RocketReliability = 1.f;
 	/** -1 = none chosen. */
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Rocket") int32 SelectedLever = -1;
+	/** Name of the chosen launcher (== Rockets[SelectedLever].Name, NAME_None if none). AMCRocketStack picks its preset by this. */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Rocket") FName SelectedLauncher;
+	/** Visual presets per launcher (data assets; matched to Rockets by LauncherName). Filled in the manager Blueprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") TArray<TObjectPtr<UMCRocketPreset>> LauncherPresets;
+	/** The preset of SelectedLauncher, or null. Works on every machine. */
+	UFUNCTION(BlueprintPure, Category = "Rocket") UMCRocketPreset* GetSelectedPreset() const;
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") float FuelKg = 0.f;
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") float FuelMaxKg = 0.f;

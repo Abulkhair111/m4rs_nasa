@@ -3,6 +3,7 @@
 #include "Bay/MCBayHudWidget.h"
 #include "Bay/MCPartMover.h"
 #include "Bay/MCPartPickerWidget.h"
+#include "Bay/MCRocketStack.h"
 #include "Construction/MCConstructionManager.h"
 #include "Construction/MCPartSocket.h"
 
@@ -234,10 +235,27 @@ int32 AMCBayCharacter::GetCrewRole() const
 	return 0;
 }
 
+static FText MakeSocketPrompt(const AMCPartSocket* S, bool bSwapHint)
+{
+	if (S->bReserved) return FText::FromString(TEXT("Part incoming..."));
+	if (!S->Installed)
+	{
+		return FText::FromString(FString::Printf(TEXT("[E] Choose a part for the %s socket"), MCBayUI::SocketTypeName(S->SocketType)));
+	}
+	return FText::FromString(FString::Printf(TEXT("%s%s%s\n%s\n%s%s"),
+		*S->Installed->DisplayName.ToString(),
+		S->bBolted ? TEXT("  [bolted]") : TEXT("  [LOOSE]"),
+		S->bGrid ? TEXT(" [wired]") : TEXT(" [not wired]"),
+		*MCBayUI::PartOneLiner(S->Installed), *MCBayUI::PartNumbers(S->Installed),
+		bSwapHint ? TEXT("\n[E] Swap this part   [R] Remove") : TEXT("")));
+}
+
 void AMCBayCharacter::UpdateAim()
 {
 	AimedSocket = nullptr;
 	AimedActor = nullptr;
+	bAimedViaStack = false;
+	bAimedLauncherPart = false;
 	AimPrompt = FText::GetEmpty();
 
 	const APlayerController* PC = Cast<APlayerController>(GetController());
@@ -246,6 +264,41 @@ void AMCBayCharacter::UpdateAim()
 	FVector Eye; FRotator Rot;
 	PC->GetPlayerViewPoint(Eye, Rot);
 	const FVector Dir = Rot.Vector();
+
+	// Pieces of the real rocket and of the wall display (long range, line of sight needed).
+	{
+		FMCStackHit Best; bool bFound = false;
+		for (TActorIterator<AMCRocketStack> It(GetWorld()); It; ++It)
+		{
+			FMCStackHit H;
+			if (It->TracePart(Eye, Dir, StackAimRange, H) && (!bFound || H.Dist < Best.Dist))
+			{
+				FHitResult Block;
+				FCollisionQueryParams Q(SCENE_QUERY_STAT(BayStackAim), false, this);
+				Q.AddIgnoredActor(*It);
+				if (GetWorld()->LineTraceSingleByChannel(Block, Eye, Eye + Dir * FMath::Max(0.f, H.Dist - 5.f), ECC_Visibility, Q)) continue;
+				Best = H; bFound = true;
+			}
+		}
+		if (bFound)
+		{
+			if (Best.bPreset)
+			{
+				const AMCConstructionManager* M = GetManager();
+				bAimedLauncherPart = true;
+				AimPrompt = FText::FromString(FString::Printf(TEXT("Launcher: %s\n[E] Next launcher"),
+					M && !M->SelectedLauncher.IsNone() ? *M->SelectedLauncher.ToString() : TEXT("none")));
+				return;
+			}
+			if (Best.Socket)
+			{
+				AimedSocket = Best.Socket;
+				bAimedViaStack = true;
+				AimPrompt = MakeSocketPrompt(AimedSocket, true);
+				return;
+			}
+		}
+	}
 
 	float BestDot = AimConeCos;
 	for (TActorIterator<AMCPartSocket> It(GetWorld()); It; ++It)
@@ -259,23 +312,7 @@ void AMCBayCharacter::UpdateAim()
 
 	if (AimedSocket)
 	{
-		const AMCPartSocket* S = AimedSocket;
-		if (S->bReserved)
-		{
-			AimPrompt = FText::FromString(TEXT("Part incoming..."));
-		}
-		else if (!S->Installed)
-		{
-			AimPrompt = FText::FromString(FString::Printf(TEXT("[E] Choose a part for the %s socket"), MCBayUI::SocketTypeName(S->SocketType)));
-		}
-		else
-		{
-			AimPrompt = FText::FromString(FString::Printf(TEXT("%s%s%s\n%s\n%s"),
-				*S->Installed->DisplayName.ToString(),
-				S->bBolted ? TEXT("  [bolted]") : TEXT("  [LOOSE]"),
-				S->bGrid ? TEXT(" [wired]") : TEXT(" [not wired]"),
-				*MCBayUI::PartOneLiner(S->Installed), *MCBayUI::PartNumbers(S->Installed)));
-		}
+		AimPrompt = MakeSocketPrompt(AimedSocket, AimedSocket->GetGroup() == EMCStackGroup::Ascent);
 		return;
 	}
 
@@ -297,11 +334,19 @@ void AMCBayCharacter::Tick(float DeltaSeconds)
 void AMCBayCharacter::OnInteractPressed()
 {
 	if (bCursorMode) return;
+	if (bAimedLauncherPart)
+	{
+		const AMCConstructionManager* M = GetManager();
+		if (M && M->Rockets.Num() > 0) ServerSelectLauncher((M->SelectedLever + 1) % M->Rockets.Num());
+		return;
+	}
 	if (AimedSocket)
 	{
 		if (AimedSocket->bReserved) return;
 		if (!AimedSocket->Installed) { OpenPicker(AimedSocket); return; }
 		if (HeldTool != EMCToolType::None) { ServerInteract(AimedSocket); return; }
+		// Installed ascent part (aimed on the rocket or its socket): open the picker to swap it.
+		if (bAimedViaStack || AimedSocket->GetGroup() == EMCStackGroup::Ascent) OpenPicker(AimedSocket);
 		return;
 	}
 	if (AimedActor) ServerInteract(AimedActor);
@@ -375,6 +420,26 @@ void AMCBayCharacter::ServerRemovePart_Implementation(AMCPartSocket* Socket)
 	{
 		Visual->Destroy();
 	}
+}
+
+void AMCBayCharacter::ServerSwapPart_Implementation(AMCPartSocket* Socket, UMCPartDef* Def)
+{
+	AMCConstructionManager* M = GetManager();
+	if (!M || !Socket || !Def || !Socket->Installed || Socket->bReserved || Socket->Installed == Def) return;
+	AMCPartMover::BindToManager(M);
+	UMCPartDef* OldDef = Socket->Installed;
+	AActor* OldVisual = Socket->InstalledActor;
+	if (!M->RemovePart(Socket, (EMCCrewRole)GetCrewRole())) return; // bolted / wrong department: manager says why
+	if (OldVisual) OldVisual->Destroy();
+	if (!M->PlacePart(Socket, Def, (EMCCrewRole)GetCrewRole()))
+	{
+		Socket->Install(OldDef, nullptr); // refused (budget, department, fit): put the old part back
+	}
+}
+
+void AMCBayCharacter::ServerSelectLauncher_Implementation(int32 LeverIndex)
+{
+	if (AMCConstructionManager* M = GetManager()) M->SelectRocket(LeverIndex);
 }
 
 void AMCBayCharacter::ServerSetHeldTool_Implementation(EMCToolType Tool)

@@ -110,3 +110,54 @@ Licences: NASA = NASA 3D Resources, public domain per NASA media guidelines (no 
 
 Consistent sets: the Kenney set is a full stack (Base -> Fuel -> Sides/Fins -> Top) at one size. The NASA parts are real-size (m) and cover a Saturn V stack (S1_Lower, Interstage, S2, S3, LemShroud/CommandModule/ServiceModule, EscapeTower), a Shuttle-style stack (ExternalTank + 2 SRB + RS25) and capsules. Use `MeshScale` in the part data asset to bring the toy-sized Kenney parts (1 m) in line with the 1 uu = 1 cm NASA parts, or scale the NASA parts down (about 0.05-0.1) for the hall. Gaps: no real decoupler ring (the Saturn interstage is the only one), no 2nd small/medium real-size tank (Kenney FuelA/FuelB are the small ones), no landing legs.
 Restricted, NOT imported (non-commercial/no-derivative licences): KSP mods Kerbodyne Plus (CC BY-NC-SA 3.0), Fuel Tanks Plus and KRnD (CC BY-NC-SA 4.0), Space Shuttle Engines by dtobi (CC-BY-ND). KSP `.mu` models are also not convertible easily. Paid/unclear (not imported): Fab "Low Poly Rockets - Modular Parts Kit" (93 parts, licence not verified), itch.io MarinsPixel "7 Rockets" (paid), CGTrader modular rocket packs (royalty-free, paid). Not tried: Sketchfab/Poly Pizza (need login or no result).
+
+## Better landers / engines / tanks (agent M1, 2026-11-14) - `Art/Meshes/Web/`
+Source: github.com/alexmaietta/lunar-surface-mobility-assets (Alex Maietta), **CC0 1.0** (credit appreciated, not required). Sources, LICENSE/NOTICE and FBX in `SourceArt/WebModels/LunarLanders_Maietta/`, converter `Tools/WebModels/glb_to_fbx.py` (Blender 5.2: Z up, origin bottom-centre, 1 m = 100 uu, textures downscaled to 1024; Blender exports only base colour + normal, so no metal/roughness maps). All checked with CaptureAssetImage (orientation OK, textured). Nanite off.
+| Asset | Real size | Notes |
+|---|---|---|
+| `Lander_ApolloLM/ApolloLM_Detailed` | 9.45 x 9.45 x 6.94 m (legs out), 27k tris, 17 materials | **Use this as the lander.** Textured Apollo LM (gold foil, legs, antennas), origin bottom-centre of footpads, upright. Replaces the NASA `ApolloLM` GLB (poor). Not yet placed in a level or BP (M2). |
+| `Lander_NovaC/NovaC` | 4.29 x 4.90 x 4.23 m, 18k tris | Textured Intuitive Machines Nova-C style lander, alternative. |
+| `Engine_BE7/BlueEngine_BE7` | 0.80 x 0.80 x 1.72 m | Full engine (bell, chamber, feed lines), nozzle down. **DA_Part_EngineBasic** (MeshScale 1.0). Extracted from the Blue Moon MK1 model. |
+| `Engine_ApolloDPS/ApolloDPS_Engine` | 1.63 x 1.63 x 2.58 m | Apollo descent engine. **DA_Part_EngineThrottle** (MeshScale 0.7 -> 1.8 m). |
+| `Engine_NovaC_VR900/NovaC_VR900_Engine` | 0.49 x 0.49 x 1.31 m | Nova-C engine, not assigned (free to use). |
+**Tanks:** `DA_Part_TankSmall` / `TankLarge` now use `Rocket/SaturnV_S1_Upper` (white cylinder, 18.7 x 10.9 m) at MeshScale 0.065 (1.2 x 0.7 m) / 0.1 (1.9 x 1.1 m). The previous Shuttle ExternalTank was a 47 m long missile shape with a muddy texture scaled to ~6 cm.
+**Why the old engines looked "cropped":** `NASA/ShuttleEng` and `ShuttleRCS` are the same open bell skirt only (no chamber/pumps); not a mesh/culling bug. Not fixed in the files, just replaced.
+**Not imported, for the user to decide (KSP and others):** Kerbodyne Plus https://github.com/bonus-eventus/kerbodynePlus (CC BY-NC-SA 3.0); Space Shuttle Engines by dtobi https://spacedock.info/mod/3009 (CC-BY-ND-4.0); SpaceY Expanded (CC-BY-NC-SA 4.0); Mecripp/z_thing https://github.com/Mecripp/z_thing (repo says MIT, but the original parts are "dwtfywwi" and the parts' origin is unclear, not verified); zer0Kerbal/LaunchPack (licence unclear); CGTrader/RenderHub "royalty free" engines and tanks (not CC). Game files of KSP were not touched. Open: no real small propellant tank with a KSP-like look; no landing legs as separate parts.
+
+## Part display table (agent M2, 2026-11-14) - for the C++ migration
+How each mesh really sits (checked with thumbnails and editor previews of `BP_Part` on the shelves; bounds from `StaticMeshTools.get_bounds`). **Rotation** = pitch/yaw/roll applied to the mesh component (equivalent of `UMCPartDef::StackMeshRotation`; in Blueprints it is the new `PDA_PartDef.MeshRotation` read by `BP_Part.ApplyVisual`). **Offset** = not stored: `BP_Part.FitMesh` computes it from the rotated component bounds (mesh centre XY on the actor origin, bottom on the origin); the C++ port should do the same (`Mesh->Bounds`, bottom = Origin.Z - BoxExtent.Z, centre = Origin.XY in actor space). **Size** = real size in cm after rotation and scale (X x Y x Z, Z up).
+
+| Part (DA_) | Mesh | Final scale | Rotation P,Y,R | Size cm (X x Y x Z) | Native orientation / notes |
+|---|---|---|---|---|---|
+| SolarSmall | NASA SatWings1 | 11.0 (was 15.6) | 90,0,0 | 2 x 108 x 99 | Native: flat sheet in XY. Pitch 90 stands it up facing local +X (the shelf front). Scale reduced so it does not overlap neighbours. |
+| SolarLarge | NASA SatWings3 | 5.8 (was 8.31) | 90,0,0 | 1 x 150 x 150 | Same, four-panel cross. |
+| RTG | Web NH_RTG | 1.8 | 0,0,0 | 62 x 62 x 202 | Native Z-up, origin bottom-centre. |
+| BatterySmall | NASA SatBody1 | 10.83 | 0,0,0 | 21 x 21 x 65 | Native Z-up cylinder, origin at centre. |
+| BatteryLarge | NASA ORU | 0.0053 | 0,0,0 | 92 x 80 x 75 | Raw GLB units are huge (17350 uu), origin far off-centre. |
+| AntennaLow | NASA SatRadio1 | 4.33 | 0,0,0 | 20 x 19 x 63 | Z-up. |
+| AntennaHigh | NASA VoyagerAntenna | 0.0417 | 0,0,0 | 66 x 126 x 93 | Origin far off-centre; dish tilts, mast diagonal. |
+| EngineBasic | Web Engine_BE7 (M1) | 1.0 | 0,0,0 | 80 x 80 x 171 | Native Z-up, nozzle down, origin bottom. The old ShuttleRCS/ShuttleEng skirts were X-axis bells and needed pitch +90. |
+| EngineThrottle | Web Engine_ApolloDPS (M1) | 0.7 | 0,0,0 | 114 x 114 x 180 | Native Z-up, nozzle down. |
+| Lidar | NASA LLCD | 0.0026 | 0,90,0 | 20 x 70 x 15 | Native: long axis X, flat. Yaw 90 so it runs along the shelf. |
+| TankSmall | Rocket SaturnV_S1_Upper (M1) | 0.065 | 0,0,0 | 65 x 65 x 121 | Native Z-up, origin bottom. The old Shuttle ExternalTank lay along X (nose to +X) and needed pitch +90. |
+| TankLarge | Rocket SaturnV_S1_Upper (M1) | 0.10 | 0,0,0 | 100 x 100 x 186 | Same mesh, bigger. |
+| NIRVSS | NASA InfraredCamera | 0.00197 | 0,0,0 | 69 x 55 x 23 | Flat on its base, native OK. |
+| NSS | NASA TOMS | 0.0193 | 0,0,0 | 75 x 23 x 47 | Native OK (origin below the body). |
+| MSolo | NASA COS | 0.00473 | 0,0,0 | 32 x 75 x 32 | Box, native OK. |
+| Camera | NASA WFPC | 0.00832 | 0,0,0 | 60 x 59 x 24 | Curved plate, native OK (origin off in Y). |
+| Drill | Engine Cylinder (placeholder) | 0.26, 0.26, 1.56 | 0,0,0 | 26 x 26 x 156 | Engine BasicShape, 100 uu, centred origin. |
+| Rover | Perseverance | 0.39 | 0,0,0 | 105 x 159 x 87 | Origin at wheel bottom (Z-up). |
+| DA_Tool_Wrench | NASA Wrench | 0.00477 (was 0.00318) | 0,0,0 | 14 x 74 x 4 | Flat tool, long along Y, lies on its plinth. Enlarged x1.5 so it reads. |
+| DA_Tool_Cable | NASA Tether1 | 0.00311 (was 0.00207) | 0,0,0 | 10 x 52 x 10 | Enlarged x1.5. |
+
+**Why parts were in the floor / cropped (old state):** (1) `BP_Part.FitMesh` was never executed (its entry exec pin was not connected), so every mesh kept its raw pivot (several NASA meshes have origins hundreds of mesh units from their centre); (2) long parts lay on their side because the DA had no rotation field. Both fixed (see [[Status]] "Agent M2"). `FitMesh` now resets the mesh to 0, reads `GetComponentBounds`, moves the mesh by minus the centre (in actor space) and then up by the box half-height.
+
+**Stands (agent M2):** `Construction/Env/Stands/MI_Stand_Base` (dark metal) and `MI_Stand_Trim_{Power,Propulsion,Science,Tools}` (emissive trims: yellow / orange / green / blue). Level actors live in outliner folders `Stands/<Dept>` (`M2_PlinthBase_*`, `M2_PlinthRing_*`, `M2_Label_*`, `M2_Spot_*`, `M2_Trim*`), made of engine Cylinder/Cube + TextRender + SpotLight.
+
+## Rocket paint (agent N2, 2026-11-14) - `Art/Materials/Rocket/`
+No better textured launch vehicle with a redistributable licence could be downloaded (checked NASA 3D Resources Saturn V/Shuttle/Ares/Atlas GLBs: Saturn V is the textured one already used on the pad, the Shuttle/Atlas/Ares ones are untextured; Smithsonian, Poly Pizza, OpenGameArt, CGTrader/Meshy: no real SLS/Falcon with CC0/CC-BY and direct download). So the existing meshes were **painted** with material instances (no geometry edited).
+- Masters: `M_RocketPaint` (LocalPosition roll pattern: ColorA/ColorB, RollColumns, BandHeightCm, StripeAmount, PhaseCm, Roughness, Metallic) and `M_RocketSLS` (colour by local position: ColorCore orange for |x|<BoosterXCm, ColorWhite for boosters/top above TopZCm, ColorEngine dark below EngineZCm). Foil/dark-metal MIs reuse `Construction/Env/M_HallTiled` (world-aligned textures).
+- MIs: `MI_Rocket_White`, `_WhiteRoll` (white + black roll squares), `_WhiteRollSmall`, `_OrangeFoam`, `_BlackGloss`, `_EngineMetal`, `_Bronze`, `_NasaRed`, `_Silver`, `_SLS`, `_GoldFoil`, `_DarkFoil`, `_DarkMetal` (last three use ambientCG textures in `Textures/`).
+- Textures: ambientCG Foil002 (gold), Foil001 (dark), Metal027 (dark anodised), CC0 1.0, 1K JPG; originals + `SOURCES.txt` in `SourceArt/AmbientCG_Rocket/`.
+- Assigned (mesh slots): `Web/NASA_SLS_Block1/SLS_Block1` -> `MI_Rocket_SLS` (orange core, white boosters/top, dark engine section); `Rocket/SaturnV_S1_Lower` and `S1_Upper` -> WhiteRoll, `S2/S3/LemShroud/ServiceModule/Fin` -> White, `Interstage` -> BlackGloss, `CommandModule` -> Silver, `EscapeTower` -> WhiteRollSmall; `Shuttle_ExternalTank` body/nose -> OrangeFoam, fittings/lines -> EngineMetal; `Shuttle_SRB` -> White; `Shuttle_RS25` bell in -> DarkMetal, out -> Bronze; `Orion_CrewModule` -> White. Not repainted: Kenney (cartoon, already coloured), ESAS/Gemini (textured), the skeletal `NASA/SaturnV/SaturnV` (original NASA texture, hidden on the pad now).
+- **Pad launcher:** `Maquette_Rocket_SLS` (StaticMeshActor, `SLS_Block1`, loc 900,-750,298, scale 0.28 = 27.5 m tall, 6.3 x 3.2 m, upright on the pad) replaces the Saturn V skeletal actor; the old actor `SkeletalMeshActor_0` is hidden (bHidden) in folder `Maquette/Rocket_OldSaturnV_hidden`. Maquette lander moved from the rocket top to the floor at (470,-750,-2).

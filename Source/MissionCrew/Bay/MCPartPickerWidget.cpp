@@ -117,7 +117,8 @@ void UMCPartPickerWidget::Open(AMCPartSocket* InSocket, AMCBayCharacter* InChara
 	}
 	if (TitleText && Socket)
 	{
-		TitleText->SetText(FText::FromString(FString::Printf(TEXT("%s - choose a part for the %s socket"), MCBayUI::GroupName(Socket->GetGroup()), MCBayUI::SocketTypeName(Socket->SocketType))));
+		TitleText->SetText(FText::FromString(FString::Printf(TEXT("%s - %s for the %s socket"), MCBayUI::GroupName(Socket->GetGroup()),
+			Socket->Installed ? TEXT("swap the part") : TEXT("choose a part"), MCBayUI::SocketTypeName(Socket->SocketType))));
 			TitleText->SetColorAndOpacity(FSlateColor(MCBayUI::GroupColor(Socket->GetGroup())));
 	}
 	PopulateRows();
@@ -185,7 +186,12 @@ void UMCPartPickerWidget::UpdatePreview()
 	const UMCPartDef* D = GetSelectedDef();
 	if (AMCRocketStack* RS = AMCRocketStack::Find(GetWorld()))
 	{
-		if (D) RS->ShowGhost(D); else RS->ClearGhost();
+		if (D)
+		{
+			RS->SetGhostReplaces(Socket && Socket->Installed ? Socket.Get() : nullptr); // swap: the ghost replaces the installed part
+			RS->ShowGhost(D);
+		}
+		else RS->ClearGhost();
 	}
 	if (ConfirmButton) ConfirmButton->SetIsEnabled(D != nullptr);
 	if (!D)
@@ -240,7 +246,14 @@ void UMCPartPickerWidget::Confirm()
 	UMCPartDef* D = GetSelectedDef();
 	if (D && Socket && Character)
 	{
-		Character->ServerPlacePart(Socket, D);
+		if (Socket->Installed)
+		{
+			if (Socket->Installed != D) Character->ServerSwapPart(Socket, D);
+		}
+		else
+		{
+			Character->ServerPlacePart(Socket, D);
+		}
 	}
 	Close();
 }

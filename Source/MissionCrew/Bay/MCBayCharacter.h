@@ -57,6 +57,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") bool bCursorMode = false;
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") TObjectPtr<AMCPartSocket> AimedSocket;
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") TObjectPtr<AActor> AimedActor;
+	/** AimedSocket came from aiming at a drawn piece of a rocket stack (real or wall display), not from the socket cone. */
+	UPROPERTY(BlueprintReadOnly, Category = "Bay") bool bAimedViaStack = false;
+	/** Aiming at launcher-preset hardware (core stage / main boosters): E cycles to the next launcher. */
+	UPROPERTY(BlueprintReadOnly, Category = "Bay") bool bAimedLauncherPart = false;
+	/** Range for aiming at rocket stack pieces (capped by each stack's AimRangeCm), cm. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay") float StackAimRange = 3000.f;
 	/** Look-at prompt text for the HUD ("[E] Choose part ...", installed part name + numbers). */
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") FText AimPrompt;
 	/** Tool in hand (wrench = bolt, cable = grid). Set with ServerSetHeldTool (e.g. from a shelf Blueprint). */
@@ -77,6 +83,10 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerRelease();
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerRemovePart(AMCPartSocket* Socket);
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSetHeldTool(EMCToolType Tool);
+	/** Swap the installed part of a socket for another one (remove + place; the old part is restored if the new one is refused). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSwapPart(AMCPartSocket* Socket, UMCPartDef* Def);
+	/** Choose the launcher (index into the manager's Rockets). Drives SelectedLauncher, so every stack changes. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSelectLauncher(int32 LeverIndex);
 
 	/** Server: a non-socket actor was interacted with (shelf, button, lever...). Handle it in a Blueprint child. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Bay") void BP_OnInteract(AActor* Target);

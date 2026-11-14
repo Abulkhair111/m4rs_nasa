@@ -54,6 +54,7 @@ void AMCConstructionManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(AMCConstructionManager, RocketCostM);
 	DOREPLIFETIME(AMCConstructionManager, RocketReliability);
 	DOREPLIFETIME(AMCConstructionManager, SelectedLever);
+	DOREPLIFETIME(AMCConstructionManager, SelectedLauncher);
 	DOREPLIFETIME(AMCConstructionManager, FuelKg);
 	DOREPLIFETIME(AMCConstructionManager, FuelMaxKg);
 	DOREPLIFETIME(AMCConstructionManager, DryMassKg);
@@ -215,8 +216,19 @@ void AMCConstructionManager::OnSocketChanged()
 
 // ------------------------------------------------------------------ state changes (server)
 
+UMCRocketPreset* AMCConstructionManager::GetSelectedPreset() const
+{
+	if (SelectedLauncher.IsNone()) { return nullptr; }
+	for (UMCRocketPreset* P : LauncherPresets)
+	{
+		if (P && P->LauncherName == SelectedLauncher) { return P; }
+	}
+	return nullptr;
+}
+
 void AMCConstructionManager::SetRocketFields(int32 Index)
 {
+	SelectedLauncher = Rockets.IsValidIndex(Index) ? Rockets[Index].Name : NAME_None;
 	if (Rockets.IsValidIndex(Index))
 	{
 		const FMCRocketDef& R = Rockets[Index];

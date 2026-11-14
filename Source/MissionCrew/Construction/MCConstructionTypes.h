@@ -202,6 +202,33 @@ public:
 	float GetReliabilityFactor() const { return Reliability > 0.f ? Reliability : 1.f; }
 };
 
+/**
+ * Launcher preset (data only). One per rocket option (Falcon 9, Vulcan, Falcon Heavy ...). The manager's LauncherPresets array
+ * holds them; the one whose LauncherName equals the replicated SelectedLauncher is drawn by AMCRocketStack (real stack and wall
+ * display) on every machine. The preset parts need no socket: they are the launcher hardware under the player's ascent stack.
+ */
+UCLASS(BlueprintType)
+class MISSIONCREW_API UMCRocketPreset : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	virtual FPrimaryAssetId GetPrimaryAssetId() const override
+	{
+		return FPrimaryAssetId(FPrimaryAssetType(TEXT("MCRocketPreset")), GetFName());
+	}
+
+	/** Must equal FMCRocketDef::Name of the matching manager Rockets entry. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preset") FName LauncherName;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preset") FText DisplayName;
+	/** Core stage parts, bottom first, stacked UNDER the parts the players install. Uses the part's Stack* visual fields. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preset") TArray<TObjectPtr<UMCPartDef>> CoreParts;
+	/** Main side booster part (e.g. a Falcon Heavy side core, Vulcan SRB). Null = none. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preset") TObjectPtr<UMCPartDef> RadialPart;
+	/** Copies of RadialPart around the core (0 = none; 2 / 4 typical; overrides the part's own RadialCount). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preset", meta = (ClampMin = "0", ClampMax = "8")) int32 RadialCount = 0;
+};
+
 /** Sub-totals of one group (lander or ascent). Replicated inside AMCConstructionManager. */
 USTRUCT(BlueprintType)
 struct FMCGroupTotals
