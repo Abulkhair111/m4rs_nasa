@@ -37,9 +37,10 @@ NASA Space Apps Challenge 2026 · Space Mission Design Game
 | Класс | Что хранит или делает |
 |---|---|
 | `BP_MC_GameMode` | Только на сервере: смена фаз, запуск поломок, подсчёт очков. |
-| `BP_MC_GameState` (replicated) | `Phase` (RepNotify), `PhaseTimeLeft`, `MissionConfig`, ресурсы (масса, бюджет, энергия, данные, топливо), `ActiveFaults[]`, `EventLog[]`, `LanderState`, `Seed`. |
-| `BP_MC_PlayerState` | `Role` (enum `E_Role`: Engineer / FlightDirector / Pilot / Scientist), `Callsign`. |
-| `BP_MC_PlayerController` | Все Server RPC: `ServerSetComponent`, `ServerPilotInput`, `ServerRepairAction`, `ServerGoNoGo`… Создаёт UI своей роли. |
+| `BP_MC_GameState` (replicated) | **Сделано (лобби):** `RoleHolders[5]`, `RoleCallsigns[5]`, `RoleReady[5]` (индекс = роль), `bRequireFullCrew`; серверные `RequestRole`, `ToggleReady`, `ReleaseRole`, `CanStart`. Дальше: `Phase` (RepNotify), `PhaseTimeLeft`, `MissionConfig`, ресурсы (масса, бюджет, энергия, данные, топливо), `ActiveFaults[]`, `EventLog[]`, `LanderState`, `Seed`. |
+| `BP_MC_PlayerState` | **Сделано:** `CrewRole` (int: 0 нет, 1 Инженер ЦУП, 2 Руководитель, 3 Пилот, 4 Учёный), `bReady`. Позывной = встроенный `PlayerName` (клиент шлёт `setname`). `OnCopyProperties` переносит роль в `L_Mission` (seamless travel). Имя `Role` занято движком (`AActor::Role`). |
+| `BP_MC_PlayerController` | Все Server RPC. **Сделано (лобби):** `ServerPickRole1..4`, `ServerToggleReady`; для UI: `PickRole`, `ToggleReady`, `StartMission`, `LeaveLobby`, `MCGS`/`MCPS`/`MyCrewRole`. Дальше: `ServerSetComponent`, `ServerPilotInput`, `ServerRepairAction`, `ServerGoNoGo`… ⚠️ Новые RPC-события нужно вручную пометить **Replicates → Run on Server** в редакторе. |
+| `BP_MC_LobbyGameMode` / `BP_LobbyHUD` | **Сделано:** лобби на `L_Lobby` (без пешки, seamless travel), освобождает роль при выходе игрока; HUD показывает `WBP_Lobby`. |
 | `BP_MC_GameInstance` | Ник игрока, IP, переход между уровнями. |
 | `BPFL_MC_Math` | Чистые функции: масса, бюджет, энергобаланс, объём данных за окно связи, очки, ранг. |
 | `BP_FaultManager` (компонент на GameMode) | Seeded `Random Stream`, частота поломок зависит от надёжности компонентов, отсчёт 60–90 с. |
