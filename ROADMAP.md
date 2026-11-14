@@ -24,8 +24,12 @@ NASA Space Apps Challenge 2026 · Space Mission Design Game
 ## 1. Архитектура (Blueprints + DataTable, сеть с первого часа)
 
 ### Сеть
-- **Listen-сервер.** Хост делает `Open Level L_Mission?listen`, остальные подключаются через `Execute Console Command "open <IP>"`. OnlineSubsystem не нужен.
-- Игра через интернет: Radmin VPN или ZeroTier, порт **UDP 7777**. Это нужно проверить в первый же час.
+- **Listen-сервер без выделенного сервера, как «Открыть для сети» в Minecraft** (сделано). Один из игроков — хост, остальные видят его игру в списке автоматически.
+  - Хост: `BP_MC_GameInstance.HostLAN` → `DestroySession` → `CreateSession` (LAN, 4 места) → `Open Level L_Lobby?listen`.
+  - Клиенты: меню каждые 3 с вызывает `FindLANGames` (UDP-широковещание, порт **14001**) → список `WBP_LanSessionRow` → клик → `JoinLANGame` → `JoinSession`.
+  - Запасной вход по IP (`open <IP>`) остался в меню.
+  - OnlineSubsystem **Null** (`DefaultEngine.ini`), без Steam/EOS и без интернета.
+- Игра через интернет: Radmin VPN или ZeroTier, порт **UDP 7777**. Это нужно проверить в первый же час. Автопоиск через VPN может не работать (широковещание), тогда входить по IP.
 - **Сервер авторитетен.** Таймеры, физика посадки, поломки, ресурсы и очки считаются только на сервере, клиенты только отображают.
 - ⚠️ Подвох UE: Server RPC работает только на акторе, которым владеет клиент. Поэтому все действия игроков (кнопка, клапан, тяга) идут через **`BP_MC_PlayerController` → Server RPC**, а не напрямую в актор комнаты.
 
