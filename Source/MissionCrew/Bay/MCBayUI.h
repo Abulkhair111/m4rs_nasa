@@ -13,6 +13,10 @@ namespace MCBayUI
 	MISSIONCREW_API FLinearColor CheckColor(EMCCheckState State);
 	/** T/W colour with the 1.3 (red below) and 2.0 (green from) limits. TWR <= 0 is red. */
 	MISSIONCREW_API FLinearColor TWRColor(float TWR);
+	/** "LANDER" / "ASCENT". */
+	MISSIONCREW_API const TCHAR* GroupName(EMCStackGroup Group);
+	/** Header colour of a group (lander blue, ascent orange). */
+	MISSIONCREW_API FLinearColor GroupColor(EMCStackGroup Group);
 	/** First AMCConstructionManager in the world (there is one per bay). */
 	MISSIONCREW_API AMCConstructionManager* FindManager(const UWorld* World);
 	/** Plain-English socket type name. */

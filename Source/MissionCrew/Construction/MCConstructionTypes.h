@@ -16,7 +16,7 @@ namespace MCConst
 	constexpr float TWRGreen = 2.0f;
 	constexpr int32 NumChecks = 10;
 	constexpr int32 NumRoles = 5;      // index 0 unused-by-convention (role 0 = free/unassigned), 1..4 real roles
-	constexpr int32 MaxSocketType = 8;
+	constexpr int32 MaxSocketType = 10;
 }
 
 /** Matches BP_PartSocket.SocketType. 99 = tool (never installed). */
@@ -32,7 +32,45 @@ enum class EMCSocketType : uint8
 	Engine   = 6,
 	Lidar    = 7,
 	Tank     = 8,
+	/** Solid rocket booster (ascent group). Self-powered: needs no cable. */
+	Booster  = 9,
+	/** Landing gear / legs (lander group). */
+	Gear     = 10,
+	/** Passive ascent-stack structure: decoupler/interstage, capsule, fairing. Self-powered, no cable (see AMCRocketStack). */
+	Structure = 11,
 	Tool     = 99
+};
+
+/**
+ * Which half of the vehicle a part or socket belongs to (design change 2026-11-14, see Vault/Decisions.md).
+ * Lander = what lands on the Moon (science, gear, rover, drill, lidar, power, batteries, comms, RTG).
+ * Ascent = what takes off from the Moon and returns (boosters, fuel tanks, engines).
+ * A part only installs on a socket of the same group.
+ */
+UENUM(BlueprintType)
+enum class EMCStackGroup : uint8
+{
+	Lander = 0,
+	Ascent = 1
+};
+
+/** Tanks, engines and boosters are always ascent hardware, whatever a data asset says. */
+inline bool MCIsAscentOnlyType(EMCSocketType T)
+{
+	return T == EMCSocketType::Tank || T == EMCSocketType::Engine || T == EMCSocketType::Booster || T == EMCSocketType::Structure;
+}
+
+/** What a part looks like in the visible rocket (AMCRocketStack). Other = inferred from SocketType (Engine/Tank/Booster), else a plain core segment. */
+UENUM(BlueprintType)
+enum class EMCStackKind : uint8
+{
+	Other     = 0,
+	Capsule   = 1,
+	Fairing   = 2,
+	Tank      = 3,
+	Engine    = 4,
+	Booster   = 5,
+	Decoupler = 6
 };
 
 /** CrewRole number == department number. 0 = unassigned / solo (everything allowed). */
@@ -105,6 +143,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part") EMCSocketType SocketType = EMCSocketType::Power;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part") EMCToolType ToolType = EMCToolType::None;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part") bool bHeavy = false;
+	/** Lander (default) or Ascent. Must equal the target socket's SocketGroup. Tanks, engines and boosters are Ascent. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part") EMCStackGroup Group = EMCStackGroup::Lander;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats") float MassKg = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats") float CostM = 0.f;
@@ -125,8 +165,84 @@ public:
 	/** Alpha 0 = keep the mesh's own materials. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual") FLinearColor Color = FLinearColor(0, 0, 0, 0);
 
+	// ---- Rocket stack visual (AMCRocketStack). All data-driven; the shelf/in-hand look still uses Mesh. ----
+	/** Role in the visible stack. Other = inferred from SocketType (see GetEffectiveStackKind). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") EMCStackKind StackKind = EMCStackKind::Other;
+	/** Height this part adds to the core stack, cm (unscaled). 0 = measure the mesh. If > 0 the mesh is fitted to it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") float StackHeightCm = 0.f;
+	/** Body radius, cm. 0 = measure the mesh. Used for the radial offset of side boosters. If > 0 the mesh XY is fitted to it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") float StackRadiusCm = 0.f;
+	/** Attach beside the core instead of on top (side boosters; the Booster kind is always radial). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") bool bRadial = false;
+	/** Copies placed around the core by ONE installed part when radial (1, 2 or 4). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack", meta = (ClampMin = "1", ClampMax = "8")) int32 RadialCount = 2;
+	/** Mesh used in the rocket stack. Empty = fall back to Mesh (with MeshScale). Soft so it loads on demand. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") TSoftObjectPtr<UStaticMesh> StackMesh;
+	/** Scale of StackMesh (ignored for the Mesh fallback, which uses MeshScale). Rotation applies to both; local Z must end up as the rocket axis. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") FVector StackMeshScale = FVector(1.0);
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stack") FRotator StackMeshRotation = FRotator::ZeroRotator;
+
+	/** Stack role with the fallbacks: explicit StackKind, else from SocketType, else Other. */
+	EMCStackKind GetEffectiveStackKind() const
+	{
+		if (StackKind != EMCStackKind::Other) return StackKind;
+		switch (SocketType)
+		{
+		case EMCSocketType::Engine:  return EMCStackKind::Engine;
+		case EMCSocketType::Tank:    return EMCStackKind::Tank;
+		case EMCSocketType::Booster: return EMCStackKind::Booster;
+		default:                     return EMCStackKind::Other;
+		}
+	}
+	bool IsRadialInStack() const { return bRadial || GetEffectiveStackKind() == EMCStackKind::Booster; }
+
+	/** Group actually used by the rules: tank/engine/booster parts are forced to Ascent so a forgotten Group value cannot put fuel on the lander. */
+	EMCStackGroup GetStackGroup() const { return MCIsAscentOnlyType(SocketType) ? EMCStackGroup::Ascent : Group; }
 	bool IsTool() const { return ToolType != EMCToolType::None; }
 	float GetReliabilityFactor() const { return Reliability > 0.f ? Reliability : 1.f; }
+};
+
+/** Sub-totals of one group (lander or ascent). Replicated inside AMCConstructionManager. */
+USTRUCT(BlueprintType)
+struct FMCGroupTotals
+{
+	GENERATED_BODY()
+
+	/** Lander: LanderBaseMassKg + parts. Ascent: parts + the fuel currently loaded. */
+	UPROPERTY(BlueprintReadOnly) float MassKg = 0.f;
+	UPROPERTY(BlueprintReadOnly) float CostM = 0.f;
+	UPROPERTY(BlueprintReadOnly) float PowerGenW = 0.f;
+	UPROPERTY(BlueprintReadOnly) float PowerUseW = 0.f;
+	UPROPERTY(BlueprintReadOnly) float StorageWh = 0.f;
+	UPROPERTY(BlueprintReadOnly) float DataMbps = 0.f;
+	UPROPERTY(BlueprintReadOnly) float BandwidthMbps = 0.f;
+	UPROPERTY(BlueprintReadOnly) float ScienceValue = 0.f;
+	UPROPERTY(BlueprintReadOnly) float ThrustN = 0.f;
+	UPROPERTY(BlueprintReadOnly) float FuelMaxKg = 0.f;
+	UPROPERTY(BlueprintReadOnly) int32 PartCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 IceCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 UnboltedCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 OffGridCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 BoosterCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 EngineCount = 0;
+};
+
+/** Per-group part of a Preview. Only the fields of the group the previewed part belongs to change. */
+USTRUCT(BlueprintType)
+struct FMCGroupPreview
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly) float MassKg = 0.f;
+	UPROPERTY(BlueprintReadOnly) float CostM = 0.f;
+	/** Lander: generated - used (W). */
+	UPROPERTY(BlueprintReadOnly) float PowerBalance = 0.f;
+	UPROPERTY(BlueprintReadOnly) float ScienceValue = 0.f;
+	UPROPERTY(BlueprintReadOnly) int32 IceCount = 0;
+	/** Ascent: thrust, tank capacity and booster count after the install. */
+	UPROPERTY(BlueprintReadOnly) float ThrustN = 0.f;
+	UPROPERTY(BlueprintReadOnly) float FuelMaxKg = 0.f;
+	UPROPERTY(BlueprintReadOnly) int32 BoosterCount = 0;
 };
 
 /** Predicted result of installing one more part, returned by AMCConstructionManager::Preview. No state is written. */
@@ -147,6 +263,10 @@ struct FMCPreviewResult
 	UPROPERTY(BlueprintReadOnly) EMCCheckState FuelState = EMCCheckState::Red;
 	UPROPERTY(BlueprintReadOnly) EMCCheckState PowerState = EMCCheckState::Red;
 	UPROPERTY(BlueprintReadOnly) bool bAffordable = true;
+	/** Group of the previewed part, and the group sub-results after installing it. */
+	UPROPERTY(BlueprintReadOnly) EMCStackGroup Group = EMCStackGroup::Lander;
+	UPROPERTY(BlueprintReadOnly) FMCGroupPreview Lander;
+	UPROPERTY(BlueprintReadOnly) FMCGroupPreview Ascent;
 };
 
 /** Launch rocket option (lever). Placeholder numbers until the design doc fixes them. */

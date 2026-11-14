@@ -74,6 +74,15 @@ public:
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") int32 OffGridCount = 0;
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") bool bHasEngine = false;
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") bool bHasLidar = false;
+	/** Solid boosters installed (ascent group). */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") int32 BoosterCount = 0;
+	/**
+	 * Group sub-totals (two stacks, see Vault/Decisions.md 2026-11-14). The flat fields above stay as whole-vehicle values:
+	 * TotalMassKg = Lander.MassKg + Ascent.MassKg = take-off mass; Storage, Data, Bandwidth, Science and IceCount come from
+	 * the LANDER group (power also counts ascent consumers); ThrustN, FuelMaxKg, TWR come from the ASCENT group.
+	 */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") FMCGroupTotals LanderTotals;
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Totals") FMCGroupTotals AscentTotals;
 
 	/** Size MCConst::NumChecks, indexed by EMCCheck. */
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Checks") TArray<EMCCheckState> Checks;
@@ -97,8 +106,8 @@ public:
 	// ---------------- Queries (any machine) ----------------
 	UFUNCTION(BlueprintPure, Category = "Construction") float GetTimeLeft() const;
 	UFUNCTION(BlueprintPure, Category = "Construction") EMCCheckState GetCheck(EMCCheck Index) const;
-	/** Catalog defs that fit a socket type for this role (tools excluded). */
-	UFUNCTION(BlueprintCallable, Category = "Construction") TArray<UMCPartDef*> GetCandidates(EMCSocketType SocketType, EMCCrewRole InRole) const;
+	/** Catalog defs that fit a socket type AND group for this role (tools excluded). */
+	UFUNCTION(BlueprintCallable, Category = "Construction") TArray<UMCPartDef*> GetCandidates(EMCSocketType SocketType, EMCCrewRole InRole, EMCStackGroup Group) const;
 	/** Predicted totals if Def were installed, bolted and wired. Uses the replicated totals, so it works on clients. */
 	UFUNCTION(BlueprintCallable, Category = "Construction") FMCPreviewResult Preview(const UMCPartDef* Def) const;
 	UFUNCTION(BlueprintPure, Category = "Construction") bool RoleAllowed(EMCCrewRole InRole, int32 RequiredDepartment) const;

@@ -1,6 +1,7 @@
 #include "Bay/MCPartPickerWidget.h"
 #include "Bay/MCBayCharacter.h"
 #include "Bay/MCBayUI.h"
+#include "Bay/MCRocketStack.h"
 #include "Construction/MCConstructionManager.h"
 #include "Construction/MCPartSocket.h"
 #include "Blueprint/WidgetTree.h"
@@ -38,6 +39,7 @@ void UMCPartPickerWidget::NativeOnInitialized()
 
 void UMCPartPickerWidget::NativeDestruct()
 {
+	if (AMCRocketStack* RS = AMCRocketStack::Find(GetWorld())) RS->ClearGhost();
 	ClearRows();
 	Super::NativeDestruct();
 }
@@ -108,14 +110,15 @@ void UMCPartPickerWidget::Open(AMCPartSocket* InSocket, AMCBayCharacter* InChara
 	if (Manager && Socket)
 	{
 		const EMCCrewRole Role = Character ? (EMCCrewRole)Character->GetCrewRole() : EMCCrewRole::None;
-		for (UMCPartDef* D : Manager->GetCandidates(Socket->SocketType, Role))
+		for (UMCPartDef* D : Manager->GetCandidates(Socket->SocketType, Role, Socket->GetGroup()))
 		{
 			Candidates.Add(D);
 		}
 	}
 	if (TitleText && Socket)
 	{
-		TitleText->SetText(FText::FromString(FString::Printf(TEXT("Choose a part for the %s socket"), MCBayUI::SocketTypeName(Socket->SocketType))));
+		TitleText->SetText(FText::FromString(FString::Printf(TEXT("%s - choose a part for the %s socket"), MCBayUI::GroupName(Socket->GetGroup()), MCBayUI::SocketTypeName(Socket->SocketType))));
+			TitleText->SetColorAndOpacity(FSlateColor(MCBayUI::GroupColor(Socket->GetGroup())));
 	}
 	PopulateRows();
 	if (!IsInViewport()) AddToViewport(50);
@@ -180,6 +183,10 @@ void UMCPartPickerWidget::SelectIndex(int32 Index)
 void UMCPartPickerWidget::UpdatePreview()
 {
 	const UMCPartDef* D = GetSelectedDef();
+	if (AMCRocketStack* RS = AMCRocketStack::Find(GetWorld()))
+	{
+		if (D) RS->ShowGhost(D); else RS->ClearGhost();
+	}
 	if (ConfirmButton) ConfirmButton->SetIsEnabled(D != nullptr);
 	if (!D)
 	{
@@ -217,7 +224,9 @@ void UMCPartPickerWidget::UpdatePreview()
 	}
 	if (CostText)
 	{
-		CostText->SetText(FText::FromString(FString::Printf(TEXT("Mass %.0f kg   Cost $%.0fM / $%.0fM%s"), R.TotalMassKg, R.TotalCostM, Manager->BudgetM, R.bAffordable ? TEXT("") : TEXT("   OVER BUDGET"))));
+		CostText->SetText(FText::FromString(FString::Printf(TEXT("%s %.0f kg (take-off mass %.0f kg)   Cost $%.0fM / $%.0fM%s"),
+			MCBayUI::GroupName(R.Group), R.Group == EMCStackGroup::Ascent ? R.Ascent.MassKg : R.Lander.MassKg, R.TotalMassKg,
+			R.TotalCostM, Manager->BudgetM, R.bAffordable ? TEXT("") : TEXT("   OVER BUDGET"))));
 		CostText->SetColorAndOpacity(FSlateColor(R.bAffordable ? FLinearColor::White : MCBayUI::CheckColor(EMCCheckState::Red)));
 	}
 	if (ConfirmButton) ConfirmButton->SetIsEnabled(R.bAffordable);
@@ -242,6 +251,7 @@ void UMCPartPickerWidget::Close()
 {
 	AMCBayCharacter* C = Character;
 	Character = nullptr;
+	if (AMCRocketStack* RS = AMCRocketStack::Find(GetWorld())) RS->ClearGhost();
 	RemoveFromParent();
 	if (C) C->OnPickerClosed(this);
 }

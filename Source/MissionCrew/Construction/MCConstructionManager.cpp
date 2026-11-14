@@ -74,6 +74,9 @@ void AMCConstructionManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(AMCConstructionManager, OffGridCount);
 	DOREPLIFETIME(AMCConstructionManager, bHasEngine);
 	DOREPLIFETIME(AMCConstructionManager, bHasLidar);
+	DOREPLIFETIME(AMCConstructionManager, BoosterCount);
+	DOREPLIFETIME(AMCConstructionManager, LanderTotals);
+	DOREPLIFETIME(AMCConstructionManager, AscentTotals);
 	DOREPLIFETIME(AMCConstructionManager, Checks);
 	DOREPLIFETIME(AMCConstructionManager, DeptReady);
 	DOREPLIFETIME(AMCConstructionManager, RoleGood);
@@ -125,12 +128,13 @@ bool AMCConstructionManager::RoleAllowed(EMCCrewRole InRole, int32 RequiredDepar
 	return bFreeRoles || InRole == EMCCrewRole::None || (int32)InRole == RequiredDepartment;
 }
 
-TArray<UMCPartDef*> AMCConstructionManager::GetCandidates(EMCSocketType SocketType, EMCCrewRole InRole) const
+TArray<UMCPartDef*> AMCConstructionManager::GetCandidates(EMCSocketType SocketType, EMCCrewRole InRole, EMCStackGroup Group) const
 {
 	TArray<UMCPartDef*> Out;
 	for (UMCPartDef* D : Catalog)
 	{
-		if (D && D->ToolType == EMCToolType::None && D->SocketType == SocketType && RoleAllowed(InRole, D->Department))
+		if (D && D->ToolType == EMCToolType::None && D->SocketType == SocketType && D->GetStackGroup() == Group
+			&& RoleAllowed(InRole, D->Department))
 		{
 			Out.Add(D);
 		}
@@ -143,16 +147,31 @@ FMCPreviewResult AMCConstructionManager::Preview(const UMCPartDef* Def) const
 	FMCPreviewResult R;
 	if (!Def) { return R; }
 
+	const bool bAsc = Def->GetStackGroup() == EMCStackGroup::Ascent;
+	R.Group = Def->GetStackGroup();
+
 	const float DryNew = DryMassKg + Def->MassKg;
 	const float FuelMaxNew = FuelMaxKg + Def->FuelCapKg;
 	const float FuelNew = FMath::Min(FuelKg, FuelMaxNew);
-	R.TotalMassKg = DryNew + FuelNew;
+	R.TotalMassKg = DryNew + FuelNew; // take-off mass: lander + ascent
 	R.TotalCostM = TotalCostM + Def->CostM;
 	R.bAffordable = R.TotalCostM <= BudgetM;
 
-	const float ThrustNew = ThrustN + Def->ThrustN;
+	// Group sub-results. Mass of the group that does not receive the part is unchanged.
+	R.Lander.MassKg = LanderTotals.MassKg + (bAsc ? 0.f : Def->MassKg);
+	R.Lander.CostM = LanderTotals.CostM + (bAsc ? 0.f : Def->CostM);
+	R.Lander.PowerBalance = (LanderTotals.PowerGenW - LanderTotals.PowerUseW) + (bAsc ? 0.f : Def->PowerW);
+	R.Lander.ScienceValue = LanderTotals.ScienceValue + (bAsc ? 0.f : Def->ScienceValue);
+	R.Lander.IceCount = LanderTotals.IceCount + ((!bAsc && Def->bIceCapable) ? 1 : 0);
+	R.Ascent.MassKg = AscentTotals.MassKg + (bAsc ? Def->MassKg : 0.f);
+	R.Ascent.CostM = AscentTotals.CostM + (bAsc ? Def->CostM : 0.f);
+	R.Ascent.ThrustN = AscentTotals.ThrustN + (bAsc ? Def->ThrustN : 0.f);
+	R.Ascent.FuelMaxKg = AscentTotals.FuelMaxKg + (bAsc ? Def->FuelCapKg : 0.f);
+	R.Ascent.BoosterCount = AscentTotals.BoosterCount + ((bAsc && Def->SocketType == EMCSocketType::Booster) ? 1 : 0);
+
+	const float ThrustNew = R.Ascent.ThrustN; // take-off thrust comes from the ascent group only
 	R.TWR = R.TotalMassKg > KINDA_SMALL_NUMBER ? ThrustNew / (R.TotalMassKg * MCConst::MoonG) : 0.f;
-	const bool bEngine = bHasEngine || Def->SocketType == EMCSocketType::Engine;
+	const bool bEngine = bHasEngine || R.Ascent.BoosterCount > 0 || (bAsc && Def->SocketType == EMCSocketType::Engine);
 	const bool bLidar = bHasLidar || Def->SocketType == EMCSocketType::Lidar;
 	R.TWRState = (!bEngine || R.TWR < MCConst::TWRRed) ? EMCCheckState::Red
 		: ((R.TWR >= MCConst::TWRGreen && bLidar) ? EMCCheckState::Green : EMCCheckState::Yellow);
@@ -268,6 +287,9 @@ bool AMCConstructionManager::PlacePart(AMCPartSocket* Socket, UMCPartDef* Def, E
 	else if (!Socket || !Def || Def->IsTool())                     { Why = TEXT("Invalid part or socket."); }
 	else if (!Socket->IsEmpty() || Socket->bReserved)              { Why = TEXT("Socket is already taken."); }
 	else if (Def->SocketType != Socket->SocketType)                { Why = TEXT("That part does not fit this socket."); }
+	else if (Def->GetStackGroup() != Socket->GetGroup())           { Why = Def->GetStackGroup() == EMCStackGroup::Ascent
+		? TEXT("Ascent part (tank, engine, booster): it goes on the ascent vehicle, not the lander.")
+		: TEXT("Lander part: it goes on the lander, not the ascent vehicle."); }
 	else if (!RoleAllowed(InRole, Def->Department))                  { Why = TEXT("That part belongs to another department."); }
 	else if (TotalCostM + Def->CostM > BudgetM)                    { Why = TEXT("Over budget."); }
 	if (!Why.IsEmpty())
@@ -321,7 +343,7 @@ bool AMCConstructionManager::ApplyTool(AMCPartSocket* Target, EMCToolType Tool, 
 	else if (Tool == EMCToolType::Cable)
 	{
 		if (!RoleAllowed(InRole, (int32)EMCCrewRole::Power)) { Say(TEXT("Only the Power Engineer uses the cable reel.")); return false; }
-		if (Target->Installed->FuelCapKg > 0.f) { Say(TEXT("Tanks do not need power cables.")); return false; }
+		if (Target->IsSelfPowered()) { Say(TEXT("Tanks and boosters do not need power cables.")); return false; }
 		Target->SetGrid(!Target->bGrid); // triggers Recalc
 		Score(EMCCrewRole::Power, PowerGenW >= PowerUseW);
 	}
@@ -339,53 +361,69 @@ void AMCConstructionManager::Recalc()
 {
 	if (!HasAuthority()) { return; }
 
-	float Dry = LanderBaseMassKg, Cost = LanderBaseCostM + RocketCostM, FuelMax = 0.f;
 	float Rel = RocketReliability > 0.f ? RocketReliability : 1.f;
-	float Gen = 0.f, Use = 0.f, Storage = 0.f, Data = 0.f, Band = 0.f, Sci = 0.f, Thrust = 0.f;
-	int32 Ice = 0, Unbolted = 0, OffGrid = 0;
-	bool bEngine = false, bLidar = false;
+	FMCGroupTotals L, A;
+	L.MassKg = LanderBaseMassKg;
+	L.CostM = LanderBaseCostM;
+	bool bLidar = false;
 
 	for (const AMCPartSocket* S : Sockets)
 	{
 		if (!S || S->IsEmpty()) { continue; }
 		const UMCPartDef* D = S->Installed;
-		const bool bTank = D->FuelCapKg > 0.f;
 		const bool bLive = S->IsLive();
+		FMCGroupTotals& G = (D->GetStackGroup() == EMCStackGroup::Ascent) ? A : L;
 
-		Dry += D->MassKg;
-		Cost += D->CostM;
-		FuelMax += D->FuelCapKg;
+		G.MassKg += D->MassKg;
+		G.CostM += D->CostM;
+		G.FuelMaxKg += D->FuelCapKg;
+		++G.PartCount;
 		Rel *= D->GetReliabilityFactor();
 
-		if (!S->bBolted) { ++Unbolted; }
-		if (!bLive && !bTank) { ++OffGrid; }
+		if (!S->bBolted) { ++G.UnboltedCount; }
+		if (!bLive && !S->IsSelfPowered()) { ++G.OffGridCount; }
 		if (!bLive) { continue; }
 
-		Gen += FMath::Max(D->PowerW, 0.f);
-		Use += FMath::Max(-D->PowerW, 0.f);
-		Storage += D->StorageWh;
-		Data += D->DataMbps;
-		Band += D->BandwidthMbps;
-		Sci += D->ScienceValue;
-		Thrust += D->ThrustN;
-		if (D->bIceCapable) { ++Ice; }
-		if (D->SocketType == EMCSocketType::Engine) { bEngine = true; }
+		G.PowerGenW += FMath::Max(D->PowerW, 0.f);
+		G.PowerUseW += FMath::Max(-D->PowerW, 0.f);
+		G.StorageWh += D->StorageWh;
+		G.DataMbps += D->DataMbps;
+		G.BandwidthMbps += D->BandwidthMbps;
+		G.ScienceValue += D->ScienceValue;
+		G.ThrustN += D->ThrustN;
+		if (D->bIceCapable) { ++G.IceCount; }
+		if (D->SocketType == EMCSocketType::Engine) { ++G.EngineCount; }
+		if (D->SocketType == EMCSocketType::Booster) { ++G.BoosterCount; }
 		if (D->SocketType == EMCSocketType::Lidar) { bLidar = true; }
 	}
 
-	DryMassKg = Dry;
-	TotalCostM = Cost;
-	FuelMaxKg = FuelMax;
-	FuelKg = FMath::Clamp(FuelKg, 0.f, FuelMax);
-	FuelRequiredKg = 0.9f * Dry;
-	TotalMassKg = Dry + FuelKg;
+	// Fuel is carried by the ascent group (tanks only exist there). Whole-vehicle mass is the take-off mass.
+	FuelMaxKg = A.FuelMaxKg;
+	FuelKg = FMath::Clamp(FuelKg, 0.f, FuelMaxKg);
+	DryMassKg = L.MassKg + A.MassKg;
+	A.MassKg += FuelKg;
+	TotalMassKg = DryMassKg + FuelKg;
+	FuelRequiredKg = 0.9f * DryMassKg;
+	TotalCostM = L.CostM + A.CostM + RocketCostM;
 	Reliability = Rel;
-	PowerGenW = Gen; PowerUseW = Use; StorageWh = Storage;
-	DataMbps = Data; BandwidthMbps = Band; ScienceValue = Sci;
-	ThrustN = Thrust;
-	IceCount = Ice; UnboltedCount = Unbolted; OffGridCount = OffGrid;
-	bHasEngine = bEngine; bHasLidar = bLidar;
-	TWR = TotalMassKg > KINDA_SMALL_NUMBER ? Thrust / (TotalMassKg * MCConst::MoonG) : 0.f;
+
+	LanderTotals = L;
+	AscentTotals = A;
+
+	// Lander drives comms, science, ice and storage; power counts every consumer (ascent hardware may draw too).
+	PowerGenW = L.PowerGenW + A.PowerGenW;
+	PowerUseW = L.PowerUseW + A.PowerUseW;
+	StorageWh = L.StorageWh + A.StorageWh;
+	DataMbps = L.DataMbps; BandwidthMbps = L.BandwidthMbps; ScienceValue = L.ScienceValue;
+	IceCount = L.IceCount;
+	// Ascent drives thrust and fuel.
+	ThrustN = A.ThrustN;
+	BoosterCount = A.BoosterCount;
+	bHasEngine = A.EngineCount > 0;
+	UnboltedCount = L.UnboltedCount + A.UnboltedCount;
+	OffGridCount = L.OffGridCount + A.OffGridCount;
+	bHasLidar = bLidar;
+	TWR = TotalMassKg > KINDA_SMALL_NUMBER ? ThrustN / (TotalMassKg * MCConst::MoonG) : 0.f;
 
 	RecalcChecks();
 	BuildReport();
@@ -415,7 +453,8 @@ void AMCConstructionManager::RecalcChecks()
 	Set(EMCCheck::Fuel, (FuelMaxKg <= 0.f || FuelKg < FuelRequiredKg) ? EMCCheckState::Red
 		: (FuelKg >= 1.1f * FuelRequiredKg ? EMCCheckState::Green : EMCCheckState::Yellow));
 
-	Set(EMCCheck::Thrust, (!bHasEngine || TWR < MCConst::TWRRed) ? EMCCheckState::Red
+	// Take-off from the Moon: ascent thrust (engines + boosters) vs the whole stack (lander + ascent + fuel).
+	Set(EMCCheck::Thrust, ((!bHasEngine && BoosterCount <= 0) || TWR < MCConst::TWRRed) ? EMCCheckState::Red
 		: ((TWR >= MCConst::TWRGreen && bHasLidar) ? EMCCheckState::Green : EMCCheckState::Yellow));
 
 	Set(EMCCheck::IceScience, IceCount <= 0 ? EMCCheckState::Red
@@ -430,8 +469,12 @@ void AMCConstructionManager::BuildReport()
 	FString Out;
 	Out += FString::Printf(TEXT("Launcher: %s | Mass %.0f / %.0f kg | Cost $%.0fM / $%.0fM\n"),
 		SelectedLever >= 0 ? *RocketName.ToString() : TEXT("none"), TotalMassKg, RocketPayloadKg, TotalCostM, BudgetM);
-	Out += FString::Printf(TEXT("T/W %.2f | Fuel %.0f / %.0f kg (need %.0f) | Power %.0f / %.0f W\n"),
-		TWR, FuelKg, FuelMaxKg, FuelRequiredKg, PowerGenW, PowerUseW);
+	Out += FString::Printf(TEXT("LANDER: %.0f kg, $%.0fM | Power %.0f / %.0f W | Science %.0f, ice x%d | Link %.1f / %.1f Mbps | loose %d, unwired %d\n"),
+		LanderTotals.MassKg, LanderTotals.CostM, LanderTotals.PowerGenW, LanderTotals.PowerUseW, LanderTotals.ScienceValue, LanderTotals.IceCount,
+		LanderTotals.BandwidthMbps, LanderTotals.DataMbps, LanderTotals.UnboltedCount, LanderTotals.OffGridCount);
+	Out += FString::Printf(TEXT("ASCENT: %.0f kg, $%.0fM | T/W %.2f (take-off %.0f kg, thrust %.1f kN) | Fuel %.0f / %.0f kg (need %.0f) | boosters %d | loose %d\n"),
+		AscentTotals.MassKg, AscentTotals.CostM, TWR, TotalMassKg, ThrustN / 1000.f, FuelKg, FuelMaxKg, FuelRequiredKg,
+		BoosterCount, AscentTotals.UnboltedCount);
 	for (int32 i = 0; i < MCConst::NumChecks; ++i)
 	{
 		Out += FString::Printf(TEXT("[%s] %s\n"), StateLabel(Checks[i]), CheckLabels[i]);
@@ -454,15 +497,15 @@ void AMCConstructionManager::UpdateAlerts()
 		bool bAlert = false;
 		if (!S->IsEmpty())
 		{
-			const bool bTank = S->Installed->FuelCapKg > 0.f;
-			bAlert = !S->bBolted || (!S->IsLive() && !bTank);
+			bAlert = !S->bBolted || (!S->IsLive() && !S->IsSelfPowered());
 			switch (S->SocketType)
 			{
 			case EMCSocketType::Power:
 			case EMCSocketType::Battery: bAlert |= IsRed(EMCCheck::Power); break;
 			case EMCSocketType::Comms:   bAlert |= IsRed(EMCCheck::Comms); break;
 			case EMCSocketType::Engine:
-			case EMCSocketType::Lidar:   bAlert |= IsRed(EMCCheck::Thrust); break;
+			case EMCSocketType::Booster:
+			case EMCSocketType::Lidar:  bAlert |= IsRed(EMCCheck::Thrust); break;
 			case EMCSocketType::Tank:    bAlert |= IsRed(EMCCheck::Fuel); break;
 			case EMCSocketType::Science:
 			case EMCSocketType::Drill:

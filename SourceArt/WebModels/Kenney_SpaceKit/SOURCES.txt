@@ -1,0 +1,5 @@
+Model: Kenney Space Kit 2.0, rocket_* parts (baseA/B, finsA/B, fuelA/B, sidesA/B, topA/B)
+URL: https://kenney.nl/assets/space-kit
+Author: Kenney (www.kenney.nl)
+Licence: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/); credit not required.
+Downloaded: 2026-11-14 (kit.zip, extracted in src/). Processing: Blender 5.2 from the glTF versions, scale 1 (about 1 m diameter), origin bottom-centre, FBX in fbx/ with embedded palette texture.

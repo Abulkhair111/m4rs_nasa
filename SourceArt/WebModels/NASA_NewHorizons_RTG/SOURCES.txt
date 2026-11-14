@@ -1,0 +1,6 @@
+Model: New Horizons GPHS-RTG (3D-print model, 4k tris, untextured)
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Printing/New%20Horizons
+Author: NASA (JPL/3D printing set)
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Downloaded: 2026-11-14 via raw.githubusercontent.com
+Processing: Blender 5.2: STL import, scaled 0.475 (1.13 m long), origin bottom-centre, dark metal material, export NH_RTG.glb. No geometry edited.

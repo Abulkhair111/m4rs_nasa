@@ -6,7 +6,11 @@
 //   Mass Budget Power Fuel TWR Science DataLink Wired Bolted
 // add   Bar_X  (ProgressBar, fill colour is set from the check)  and  Txt_X  (TextBlock with the numbers).
 // Row -> check: Mass=Checks[1] Budget=2 Power=3 Fuel=5 TWR=6 Science=7 DataLink=4 Wired=8 Bolted=9.
+// Two stacks (design change 2026-11-14): LANDER rows = Power, Science, DataLink (+ Txt_LanderTotals); ASCENT rows = Fuel, TWR
+// (+ Txt_AscentTotals); Mass/Budget/Wired/Bolted are whole-vehicle (T/W uses the take-off mass of lander + ascent).
 // Extra widgets:
+//   Txt_LanderTotals / Txt_AscentTotals  TextBlock  per-group summary
+
 //   TWRGauge        ProgressBar  big gauge, scale 0..GaugeMax (default 3.0)
 //   TWRGaugeText    TextBlock    "T/W 1.85"
 //   TWRMarkerLow    Widget       thin line at 1.3; anchored/aligned LEFT inside the gauge's overlay; moved with RenderTranslation
@@ -55,6 +59,10 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> Txt_Wired;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UProgressBar> Bar_Bolted;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> Txt_Bolted;
+
+	/** Section summaries under the LANDER / ASCENT headers (mass, cost, key numbers of that group). */
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> Txt_LanderTotals;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> Txt_AscentTotals;
 
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UProgressBar> TWRGauge;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TWRGaugeText;

@@ -69,20 +69,34 @@ void UMCResourceGraphsWidget::BuildFallbackLayout()
 	TWRMarkerLow = Marker(TEXT("TWRMarkerLow"));
 	TWRMarkerHigh = Marker(TEXT("TWRMarkerHigh"));
 
-	struct FRowDef { const TCHAR* Label; TObjectPtr<UProgressBar>* Bar; TObjectPtr<UTextBlock>* Txt; };
+	struct FRowDef { const TCHAR* Label; TObjectPtr<UProgressBar>* Bar; TObjectPtr<UTextBlock>* Txt; EMCStackGroup Group; };
+	// Bar == nullptr -> a section header (with a totals text for LANDER / ASCENT).
 	const FRowDef Rows[] = {
-		{ TEXT("Mass"),      &Bar_Mass,     &Txt_Mass },
-		{ TEXT("Budget"),    &Bar_Budget,   &Txt_Budget },
-		{ TEXT("Power"),     &Bar_Power,    &Txt_Power },
-		{ TEXT("Fuel"),      &Bar_Fuel,     &Txt_Fuel },
-		{ TEXT("T/W"),       &Bar_TWR,      &Txt_TWR },
-		{ TEXT("Science"),   &Bar_Science,  &Txt_Science },
-		{ TEXT("Data link"), &Bar_DataLink, &Txt_DataLink },
-		{ TEXT("Wired"),     &Bar_Wired,    &Txt_Wired },
-		{ TEXT("Bolted"),    &Bar_Bolted,   &Txt_Bolted },
+		{ TEXT("Mass"),      &Bar_Mass,     &Txt_Mass,     EMCStackGroup::Lander },
+		{ TEXT("Budget"),    &Bar_Budget,   &Txt_Budget,   EMCStackGroup::Lander },
+		{ TEXT("LANDER"),    nullptr,       &Txt_LanderTotals, EMCStackGroup::Lander },
+		{ TEXT("Power"),     &Bar_Power,    &Txt_Power,    EMCStackGroup::Lander },
+		{ TEXT("Science"),   &Bar_Science,  &Txt_Science,  EMCStackGroup::Lander },
+		{ TEXT("Data link"), &Bar_DataLink, &Txt_DataLink, EMCStackGroup::Lander },
+		{ TEXT("ASCENT"),    nullptr,       &Txt_AscentTotals, EMCStackGroup::Ascent },
+		{ TEXT("Fuel"),      &Bar_Fuel,     &Txt_Fuel,     EMCStackGroup::Ascent },
+		{ TEXT("T/W"),       &Bar_TWR,      &Txt_TWR,      EMCStackGroup::Ascent },
+		{ TEXT("Wired"),     &Bar_Wired,    &Txt_Wired,    EMCStackGroup::Lander },
+		{ TEXT("Bolted"),    &Bar_Bolted,   &Txt_Bolted,   EMCStackGroup::Lander },
 	};
 	for (const FRowDef& R : Rows)
 	{
+		if (!R.Bar)
+		{
+			UTextBlock* Head = Text(*FString::Printf(TEXT("Hdr_%s"), R.Label), 18);
+			Head->SetText(FText::FromString(R.Label));
+			Head->SetColorAndOpacity(FSlateColor(MCBayUI::GroupColor(R.Group)));
+			if (UVerticalBoxSlot* S = VB->AddChildToVerticalBox(Head)) S->SetPadding(FMargin(0, 10, 0, 0));
+			*R.Txt = Text(*FString::Printf(TEXT("RowTxt_%s"), R.Label), 12);
+			(*R.Txt)->SetAutoWrapText(true);
+			if (UVerticalBoxSlot* S = VB->AddChildToVerticalBox(*R.Txt)) S->SetPadding(FMargin(0, 1));
+			continue;
+		}
 		UTextBlock* Label = Text(*FString::Printf(TEXT("Lbl_%s"), R.Label), 14);
 		Label->SetText(FText::FromString(R.Label));
 		*R.Bar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass());
@@ -178,10 +192,25 @@ void UMCResourceGraphsWidget::Refresh()
 		FString::Printf(TEXT("%.1f data / %.1f link Mbps"), M->DataMbps, M->BandwidthMbps), Col(EMCCheck::Comms));
 
 	SetRow(Bar_Wired, Txt_Wired, StateFrac(EMCCheck::Grid),
-		M->OffGridCount == 0 ? FString(TEXT("all wired")) : FString::Printf(TEXT("%d not wired"), M->OffGridCount), Col(EMCCheck::Grid));
+		M->OffGridCount == 0 ? FString(TEXT("all wired")) : FString::Printf(TEXT("%d not wired (lander %d, ascent %d)"), M->OffGridCount, M->LanderTotals.OffGridCount, M->AscentTotals.OffGridCount), Col(EMCCheck::Grid));
 
 	SetRow(Bar_Bolted, Txt_Bolted, StateFrac(EMCCheck::Structure),
-		M->UnboltedCount == 0 ? FString(TEXT("all bolted")) : FString::Printf(TEXT("%d loose"), M->UnboltedCount), Col(EMCCheck::Structure));
+		M->UnboltedCount == 0 ? FString(TEXT("all bolted")) : FString::Printf(TEXT("%d loose (lander %d, ascent %d)"), M->UnboltedCount, M->LanderTotals.UnboltedCount, M->AscentTotals.UnboltedCount), Col(EMCCheck::Structure));
+
+	const FMCGroupTotals& L = M->LanderTotals;
+	const FMCGroupTotals& A = M->AscentTotals;
+	if (Txt_LanderTotals)
+	{
+		Txt_LanderTotals->SetText(FText::FromString(FString::Printf(TEXT("%.0f kg | $%.0fM | %d parts | science %.0f, ice x%d | power %.0f / %.0f W"),
+			L.MassKg, L.CostM, L.PartCount, L.ScienceValue, L.IceCount, L.PowerGenW, L.PowerUseW)));
+		Txt_LanderTotals->SetColorAndOpacity(FSlateColor(MCBayUI::GroupColor(EMCStackGroup::Lander)));
+	}
+	if (Txt_AscentTotals)
+	{
+		Txt_AscentTotals->SetText(FText::FromString(FString::Printf(TEXT("%.0f kg | $%.0fM | %d parts | thrust %.1f kN | tanks %.0f kg | boosters %d | take-off %.0f kg"),
+			A.MassKg, A.CostM, A.PartCount, A.ThrustN / 1000.f, A.FuelMaxKg, A.BoosterCount, M->TotalMassKg)));
+		Txt_AscentTotals->SetColorAndOpacity(FSlateColor(MCBayUI::GroupColor(EMCStackGroup::Ascent)));
+	}
 
 	if (CriticalText)
 	{

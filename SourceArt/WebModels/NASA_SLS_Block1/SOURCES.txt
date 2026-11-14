@@ -1,0 +1,6 @@
+Model: Space Launch System Block 1 (3D-print model, 274k tris, untextured)
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Printing/Space%20Launch%20System%20(SLS)%20Block%201
+Author: NASA (Marshall/3D printing set)
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Downloaded: 2026-11-14 via raw.githubusercontent.com
+Processing: Blender 5.2: STL import, scaled mm->m by 0.4937 (98.1 m tall), origin bottom-centre, auto smooth 35 deg, one grey Principled material, export SLS_Block1.glb. No geometry edited.

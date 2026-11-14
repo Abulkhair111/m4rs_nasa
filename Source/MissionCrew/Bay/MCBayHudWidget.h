@@ -3,7 +3,6 @@
 // Reparent a WBP to UMCBayHudWidget and add widgets with EXACTLY these names (all optional):
 //   TWRText     TextBlock  "T/W 1.85" coloured with the 1.3 / 2.0 limits
 //   FuelText    TextBlock  "Fuel 540 / 1100 kg (need 900)"
-//   TimeText    TextBlock  "08:42"
 //   MessageText TextBlock  last manager Say() message
 //   PromptText  TextBlock  look-at prompt from AMCBayCharacter::AimPrompt
 //   TWRBar      ProgressBar  T/W on a 0..3 scale, filled with the same colour
@@ -27,7 +26,6 @@ public:
 
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TWRText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> FuelText;
-	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TimeText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MessageText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> PromptText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UProgressBar> TWRBar;

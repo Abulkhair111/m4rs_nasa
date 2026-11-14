@@ -22,6 +22,16 @@ namespace MCBayUI
 		return CheckColor(EMCCheckState::Green);
 	}
 
+	const TCHAR* GroupName(EMCStackGroup Group)
+	{
+		return Group == EMCStackGroup::Ascent ? TEXT("ASCENT") : TEXT("LANDER");
+	}
+
+	FLinearColor GroupColor(EMCStackGroup Group)
+	{
+		return Group == EMCStackGroup::Ascent ? FLinearColor(1.0f, 0.55f, 0.15f) : FLinearColor(0.35f, 0.75f, 1.0f);
+	}
+
 	AMCConstructionManager* FindManager(const UWorld* World)
 	{
 		if (!World) return nullptr;
@@ -45,6 +55,9 @@ namespace MCBayUI
 		case EMCSocketType::Engine:  return TEXT("engine");
 		case EMCSocketType::Lidar:   return TEXT("lidar");
 		case EMCSocketType::Tank:    return TEXT("fuel tank");
+		case EMCSocketType::Booster: return TEXT("booster");
+		case EMCSocketType::Gear:    return TEXT("landing gear");
+		case EMCSocketType::Structure: return TEXT("stack structure");
 		default:                     return TEXT("tool");
 		}
 	}

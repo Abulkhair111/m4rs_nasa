@@ -1,0 +1,5 @@
+Models: Saturn V Rocket 3D-print parts (S-IC lower/upper, S-II, S-IVB, 1-2 interstage coupler v2, command module, service module, escape tower, LM shroud, fin)
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Printing/Saturn%20V%20Rocket
+Author: NASA
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Processing: Blender 5.2: STL import, rotated so -Y is up, uniform scale 0.1117 (S-IC diameter 10.06 m), origin bottom-centre, grey material, FBX in fbx/. No geometry edited. Scale is derived from known stage diameter, approximate.

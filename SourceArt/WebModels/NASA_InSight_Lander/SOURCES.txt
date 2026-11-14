@@ -1,0 +1,7 @@
+Model: InSight lander (panels deployed), textured GLB
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/InSight%20Cruise%20Lander
+Author: NASA (JPL)
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Downloaded: 2026-11-14 via raw.githubusercontent.com
+Processing: None (original GLB).
+Processing: Blender 5.2: glTF import, FBX export with embedded textures (fbx/InSight_Lander.fbx), no geometry edits. UE asset folder: NASA_InSight_Lander_T (name has _T because the clean name was blocked by a stale asset).

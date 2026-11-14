@@ -1,0 +1,5 @@
+Model: Orion Capsule (no fbc) 3D-print STL
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Printing/Orion%20Capsule
+Author: NASA
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Processing: Blender 5.2: rotated Y-up to Z-up, scale 0.308 (5.0 m diameter), origin bottom-centre, grey material. No geometry edited.

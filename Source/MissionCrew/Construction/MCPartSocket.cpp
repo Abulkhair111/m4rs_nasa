@@ -16,6 +16,7 @@ void AMCPartSocket::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMCPartSocket, SocketType);
+	DOREPLIFETIME(AMCPartSocket, SocketGroup);
 	DOREPLIFETIME(AMCPartSocket, Installed);
 	DOREPLIFETIME(AMCPartSocket, InstalledActor);
 	DOREPLIFETIME(AMCPartSocket, bBolted);

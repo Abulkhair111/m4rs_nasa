@@ -63,3 +63,50 @@ Source GLBs: `SourceArt/NASA3D_Env/`. Import script: `Tools/Env/import_env_model
 
 ### Hall textures (agent A)
 Source: ambientCG (https://ambientcg.com), licence CC0 1.0. `T_Hall_Wall_*` = Concrete034, `T_Hall_Floor_*` = MetalPlates006, `T_Hall_Ceiling_*` = Metal038 (1K JPG, Color + Roughness) in `Construction/Env/Textures/`; originals in `SourceArt/AmbientCG/`. Master material `Construction/Env/M_HallTiled` (world-aligned, so stretched cube walls tile correctly); instances `MI_Hall_Wall/Floor/Ceiling`.
+
+## Web models (agent H, 2026-11-14) - `Art/Meshes/Web/<Name>/`
+Source files and `SOURCES.txt` (URL, author, licence) in `SourceArt/WebModels/<Name>/`. All three are NASA 3D Resources (github.com/nasa/NASA-3D-Resources, public domain per NASA media guidelines). `StaticMeshTools.import_file` accepts only **FBX/OBJ** (not GLB), so models were converted with Blender 5.2 (`C:\Program Files\Blender Foundation\Blender 5.2`, FBX export `global_scale=1`, `FBX_SCALE_NONE`, axes -Y/Z gives 1 m = 100 uu). Nanite not enabled.
+| Asset | Real size | Notes |
+|---|---|---|
+| `NASA_SLS_Block1/SLS_Block1` | 22.4 x 11.3 x 98.1 m (uu: 2236 x 1134 x 9812), origin bottom-centre, Z up | SLS Block 1 with both boosters, 274k tris, from the NASA 3D-print STL (untextured; one light-grey material `M_Space_Launch_System_`). Launcher visual for agent A. Heavy-ish, use LODs or distance only. |
+| `NASA_InSight_Lander_T/InSight_Lander` | 6.1 x 2.8 x 1.6 m (panels deployed), 147k tris, 17 materials + 4 textures | Textured NASA JPL InSight lander (legs, deck, two round solar arrays, arm). Best-detail lander available; a Mars lander, not a Moon one. Origin near deck level (z -64..+95 cm). Folder has a `_T` suffix, ignore. |
+| `NASA_NewHorizons_RTG/NH_RTG` | 0.35 x 0.35 x 1.13 m, origin bottom-centre, 4k tris | New Horizons GPHS-RTG, dark metal material. **Assigned to `DA_Part_RTG`** (MeshScale 1.8, colour alpha 0). |
+No CC0/CC-BY Falcon 9, Vulcan, Falcon Heavy, Artemis HLS or textured Apollo LM could be downloaded without login (Smithsonian 3D has no LM/rocket; Sketchfab/CGTrader/TurboSquid need login or are paid). Not imported: SLS multi-GB 7z, Gateway (66 MB GLB), Space Exploration Vehicle (22 MB).
+
+## Zone markings (agent I, 2026-11-14) - `Construction/Env/`
+`M_ZoneDecal` (Deferred Decal, translucent, emissive; params Color/Opacity/Glow; exposure is manual bias 9.5 so keep Glow <= 1) and MIs `MI_Zone_Lander`, `MI_Zone_Ascent`, `MI_Zone_Lander_Line`, `MI_Zone_Ascent_Line`, `MI_Zone_Divider`. `MI_Proto_Mission` is now dark steel instead of pink.
+
+## Rocket parts (agent J, 2026-11-14) - `Art/Meshes/Rocket/<Part>/<Part>` (26 static meshes)
+For KSP-style stackable rockets. Every mesh: origin at the **bottom centre**, +Z up, nose/payload end up and engine end down, 1 uu = 1 cm (FBX scale 1), Nanite OFF, no geometry edited. Stack by placing the next part's origin at the previous part's top (z = height). Sources, SOURCES.txt and the FBX files are in `SourceArt/WebModels/<Pack>/` (`NASA_SaturnV_Modular`, `NASA_Orion`, `NASA_ShuttleGemini`, `Kenney_SpaceKit`). Each part has its own folder with materials/textures. Thumbnails checked with CaptureAssetImage (orientation OK). Sizes are metres; "r bot/top" = attach radius at the bottom/top end (m). Saturn V scale is approximate (uniform 0.1117 so the S-IC is 10.06 m wide).
+Licences: NASA = NASA 3D Resources, public domain per NASA media guidelines (no NASA logo use, no endorsement). Kenney = CC0.
+
+| Part | Kind | Height | Diameter | r bot / top | Notes | Licence |
+|---|---|---|---|---|---|---|
+| `SaturnV_CommandModule` | capsule | 2.24 | 3.8 | 1.5 / 0.9 | Apollo CM, 3.6k tris | NASA PD |
+| `SaturnV_ServiceModule` | service module (under capsule) | 9.09 | 4.8 | 1.5 / 1.8 | Apollo SM with engine bell at the bottom, 46k tris | NASA PD |
+| `SaturnV_EscapeTower` | nose / LES | 12.39 | 4.3 | 2.2 / 0.2 | Launch escape tower with its own boost cone, 16k tris | NASA PD |
+| `SaturnV_LemShroud` | fairing / adapter | 7.11 | 6.7 | 3.3 / 2.2 | Conical LM adapter | NASA PD |
+| `SaturnV_S3` | tank + engine (upper stage) | 20.3 | 7.4 | 1.3 (nozzle) / 2.6 | S-IVB with J-2 | NASA PD |
+| `SaturnV_Interstage` | decoupler / interstage | 10.82 | 11.3 | 4.6 / 4.6 | S-IC/S-II coupler (v2) | NASA PD |
+| `SaturnV_S2` | tank + engines (mid stage) | 29.57 | 11.0 | 3.5 / 3.4 | S-II with 5 J-2 at the bottom, 16k tris | NASA PD |
+| `SaturnV_S1_Upper` | tank | 18.69 | 10.9 | 5.4 / 5.0 | S-IC tank section | NASA PD |
+| `SaturnV_S1_Lower` | engine stage + fins | 22.68 | 13.9 (fins) | 6.5 / 5.4 | S-IC with 5 F-1 + 4 fins, 38k tris | NASA PD |
+| `SaturnV_Fin` | fin | 3.24 | 5.0 (span) | - | Single fin, 66 tris | NASA PD |
+| `Orion_CrewModule` | capsule | 3.28 | 5.0 | 1.1 / 0.7 | Orion crew module, 52k tris | NASA PD |
+| `ESAS_CrewModule` | capsule | 2.19 | 4.2 | 2.1 / 0.4 | Simple CEV capsule, 650 tris | NASA PD |
+| `Gemini_Capsule` | capsule | 4.17 | 2.2 | 1.1 / 0.2 | Textured Gemini, 39k tris, units guessed from feet | NASA PD |
+| `Shuttle_ExternalTank` | tank (large) | 47.74 | 11.6 incl. fittings (body 8.4) | 4.9 / 1.5 | Ogive nose on top | NASA PD |
+| `Shuttle_SRB` | booster (side) | 45.24 | 5.9 | 2.9 / 0.2 | Solid booster, nozzle at the bottom, nose cone on top | NASA PD |
+| `Shuttle_RS25` | engine | 2.60 | 2.5 | 1.3 / 0.5 | Shuttle main engine bell | NASA PD |
+| `Kenney_Rocket_TopA` | nose cone (small) | 0.80 | 1.08 | 0.54 / 0.14 | Cartoon style, 50 tris | CC0 |
+| `Kenney_Rocket_TopB` | nose cone with antenna | 1.10 | 1.08 | 0.54 / 0.04 | | CC0 |
+| `Kenney_Rocket_FuelA` | tank (short) | 0.50 | 1.08 | 0.54 / 0.54 | | CC0 |
+| `Kenney_Rocket_FuelB` | tank (tall) | 1.00 | 1.08 | 0.54 / 0.54 | | CC0 |
+| `Kenney_Rocket_SidesA` | side booster | 1.00 | 1.08 | 0.54 / 0.54 | Mount on a tank's side | CC0 |
+| `Kenney_Rocket_SidesB` | side booster (wide) | 1.00 | 1.32 | 0.54 / 0.54 | | CC0 |
+| `Kenney_Rocket_BaseA` | engine (with legs) | 1.60 | 1.8 | 0.9 / 0.6 | | CC0 |
+| `Kenney_Rocket_BaseB` | engine (short) | 1.30 | 1.8 | 0.9 / 0.5 | | CC0 |
+| `Kenney_Rocket_FinsA` / `FinsB` | fins ring | 0.70 | 1.2 | 0.54 / 0.54 | Two variants | CC0 |
+
+Consistent sets: the Kenney set is a full stack (Base -> Fuel -> Sides/Fins -> Top) at one size. The NASA parts are real-size (m) and cover a Saturn V stack (S1_Lower, Interstage, S2, S3, LemShroud/CommandModule/ServiceModule, EscapeTower), a Shuttle-style stack (ExternalTank + 2 SRB + RS25) and capsules. Use `MeshScale` in the part data asset to bring the toy-sized Kenney parts (1 m) in line with the 1 uu = 1 cm NASA parts, or scale the NASA parts down (about 0.05-0.1) for the hall. Gaps: no real decoupler ring (the Saturn interstage is the only one), no 2nd small/medium real-size tank (Kenney FuelA/FuelB are the small ones), no landing legs.
+Restricted, NOT imported (non-commercial/no-derivative licences): KSP mods Kerbodyne Plus (CC BY-NC-SA 3.0), Fuel Tanks Plus and KRnD (CC BY-NC-SA 4.0), Space Shuttle Engines by dtobi (CC-BY-ND). KSP `.mu` models are also not convertible easily. Paid/unclear (not imported): Fab "Low Poly Rockets - Modular Parts Kit" (93 parts, licence not verified), itch.io MarinsPixel "7 Rockets" (paid), CGTrader modular rocket packs (royalty-free, paid). Not tried: Sketchfab/Poly Pizza (need login or no result).

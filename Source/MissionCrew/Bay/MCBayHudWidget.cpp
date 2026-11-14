@@ -45,7 +45,6 @@ void UMCBayHudWidget::BuildFallbackLayout()
 	TWRBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("TWRBar"));
 	VB->AddChildToVerticalBox(TWRBar);
 	AddText(FuelText, TEXT("FuelText"), 16);
-	AddText(TimeText, TEXT("TimeText"), 16);
 	AddText(MessageText, TEXT("MessageText"), 16);
 
 	PromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PromptText"));
@@ -88,7 +87,7 @@ void UMCBayHudWidget::Refresh()
 	if (!Manager) return;
 
 	const float Twr = Manager->TWR;
-	const FLinearColor Col = MCBayUI::TWRColor(Manager->bHasEngine ? Twr : 0.f);
+	const FLinearColor Col = MCBayUI::TWRColor((Manager->bHasEngine || Manager->BoosterCount > 0) ? Twr : 0.f);
 	if (TWRText)
 	{
 		TWRText->SetText(FText::FromString(FString::Printf(TEXT("T/W %.2f"), Twr)));
@@ -104,11 +103,6 @@ void UMCBayHudWidget::Refresh()
 		FuelText->SetText(FText::FromString(FString::Printf(TEXT("Fuel %.0f / %.0f kg (need %.0f)"), Manager->FuelKg, Manager->FuelMaxKg, Manager->FuelRequiredKg)));
 		const bool bFuelOk = Manager->FuelKg >= Manager->FuelRequiredKg && Manager->FuelRequiredKg > 0.f;
 		FuelText->SetColorAndOpacity(FSlateColor(MCBayUI::CheckColor(bFuelOk ? EMCCheckState::Green : EMCCheckState::Red)));
-	}
-	if (TimeText)
-	{
-		const int32 T = FMath::Max(0, FMath::FloorToInt(Manager->GetTimeLeft()));
-		TimeText->SetText(FText::FromString(FString::Printf(TEXT("%02d:%02d"), T / 60, T % 60)));
 	}
 	if (MessageText)
 	{

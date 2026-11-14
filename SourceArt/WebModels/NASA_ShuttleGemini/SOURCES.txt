@@ -1,0 +1,5 @@
+Models: Solid Rocket Booster, External tank, Space Shuttle (D) eng, ESAS Crew Module, Gemini (GLB)
+URL: https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models  (folders Space Shuttle Parts, Space Shuttle (D), ESAS Crew Module, Gemini)
+Author: NASA
+Licence: NASA 3D Resources - free and without copyright (public domain per NASA media usage guidelines, https://www.nasa.gov/nasa-brand-center/images-and-media). Do not imply NASA endorsement; do not use the NASA insignia as a logo.
+Processing: Blender 5.2: rotated to Z-up, scaled from inches (0.0254; Gemini from feet 0.3048), origin bottom-centre, own materials kept. FBX in fbx/. No geometry edited.

@@ -25,6 +25,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Socket")
 	EMCSocketType SocketType = EMCSocketType::Power;
 
+	/** Which half of the vehicle this socket is on. Only parts with the same UMCPartDef::Group install here. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Socket")
+	EMCStackGroup SocketGroup = EMCStackGroup::Lander;
+
 	/** Installed definition (null = empty). Replicated so clients can read it for the HUD / previews. */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_State, Category = "Socket")
 	TObjectPtr<UMCPartDef> Installed;
@@ -40,9 +44,13 @@ public:
 	/** Red pulsing marker: installed but loose/off-grid, or a red check after preflight. */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_State, Category = "Socket") bool bAlert = false;
 
+	/** SocketGroup, except tank/engine/booster sockets are always Ascent. */
+	EMCStackGroup GetGroup() const { return MCIsAscentOnlyType(SocketType) ? EMCStackGroup::Ascent : SocketGroup; }
 	bool IsEmpty() const { return Installed == nullptr; }
-	/** True if a tank (fuel cap > 0) or the grid cable is connected: only live parts add power/thrust/science. */
-	bool IsLive() const { return Installed && (Installed->FuelCapKg > 0.f || bGrid); }
+	/** Tanks and solid boosters work without a cable. */
+	bool IsSelfPowered() const { return Installed && (Installed->FuelCapKg > 0.f || Installed->SocketType == EMCSocketType::Booster || Installed->SocketType == EMCSocketType::Structure); }
+	/** True if a tank/booster or the grid cable is connected: only live parts add power/thrust/science. */
+	bool IsLive() const { return Installed && (IsSelfPowered() || bGrid); }
 
 	/** Server only. Installs, resets bolt/grid flags, clears the reservation, notifies the manager. */
 	void Install(UMCPartDef* Def, AActor* PartActor);
