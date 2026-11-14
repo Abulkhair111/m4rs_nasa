@@ -168,7 +168,7 @@ struct FMCLoadoutEntry
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly) EMCSocketType SocketType = EMCSocketType::Power;
-	UPROPERTY(BlueprintReadOnly) TObjectPtr<const UMCPartDef> Def = nullptr;
+	UPROPERTY(BlueprintReadOnly) TObjectPtr<UMCPartDef> Def = nullptr;
 	UPROPERTY(BlueprintReadOnly) bool bBolted = false;
 	UPROPERTY(BlueprintReadOnly) bool bGrid = false;
 };

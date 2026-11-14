@@ -1,0 +1,4 @@
+ambientCG (https://ambientcg.com), licence CC0 1.0 (public domain).
+T_Hall_Wall_*    = Concrete034   (1K-JPG)
+T_Hall_Floor_*   = MetalPlates006 (1K-JPG)
+T_Hall_Ceiling_* = Metal038      (1K-JPG)

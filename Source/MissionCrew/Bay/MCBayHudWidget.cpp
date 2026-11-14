@@ -1,0 +1,120 @@
+#include "Bay/MCBayHudWidget.h"
+#include "Bay/MCBayCharacter.h"
+#include "Bay/MCBayUI.h"
+#include "Construction/MCConstructionManager.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/ProgressBar.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
+
+void UMCBayHudWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	if (!TWRText && !FuelText && WidgetTree && !WidgetTree->RootWidget)
+	{
+		BuildFallbackLayout();
+	}
+}
+
+void UMCBayHudWidget::BuildFallbackLayout()
+{
+	UCanvasPanel* Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("HudCanvas"));
+	WidgetTree->RootWidget = Canvas;
+	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+	UVerticalBox* VB = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("HudVB"));
+	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(VB))
+	{
+		S->SetAnchors(FAnchors(0.f, 0.f));
+		S->SetPosition(FVector2D(24.f, 24.f));
+		S->SetAutoSize(true);
+	}
+	auto AddText = [&](TObjectPtr<UTextBlock>& Out, const TCHAR* Name, int32 Size) {
+		Out = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		FSlateFontInfo F = Out->GetFont();
+		F.Size = Size;
+		Out->SetFont(F);
+		if (UVerticalBoxSlot* S = VB->AddChildToVerticalBox(Out)) S->SetPadding(FMargin(0, 2));
+	};
+	AddText(TWRText, TEXT("TWRText"), 26);
+	TWRBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("TWRBar"));
+	VB->AddChildToVerticalBox(TWRBar);
+	AddText(FuelText, TEXT("FuelText"), 16);
+	AddText(TimeText, TEXT("TimeText"), 16);
+	AddText(MessageText, TEXT("MessageText"), 16);
+
+	PromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PromptText"));
+	FSlateFontInfo F = PromptText->GetFont();
+	F.Size = 18;
+	PromptText->SetFont(F);
+	PromptText->SetJustification(ETextJustify::Center);
+	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(PromptText))
+	{
+		S->SetAnchors(FAnchors(0.5f, 0.78f));
+		S->SetAlignment(FVector2D(0.5f, 0.f));
+		S->SetPosition(FVector2D::ZeroVector);
+		S->SetAutoSize(true);
+	}
+}
+
+void UMCBayHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (!Manager)
+	{
+		FindTimer -= InDeltaTime;
+		if (FindTimer <= 0.f)
+		{
+			FindTimer = 0.5f;
+			Manager = MCBayUI::FindManager(GetWorld());
+		}
+	}
+	Refresh();
+}
+
+void UMCBayHudWidget::Refresh()
+{
+	if (PromptText)
+	{
+		FText Prompt;
+		if (const AMCBayCharacter* C = Cast<AMCBayCharacter>(GetOwningPlayerPawn())) Prompt = C->AimPrompt;
+		PromptText->SetText(Prompt);
+	}
+	if (!Manager) return;
+
+	const float Twr = Manager->TWR;
+	const FLinearColor Col = MCBayUI::TWRColor(Manager->bHasEngine ? Twr : 0.f);
+	if (TWRText)
+	{
+		TWRText->SetText(FText::FromString(FString::Printf(TEXT("T/W %.2f"), Twr)));
+		TWRText->SetColorAndOpacity(FSlateColor(Col));
+	}
+	if (TWRBar)
+	{
+		TWRBar->SetPercent(FMath::Clamp(Twr / FMath::Max(TWRBarMax, 0.1f), 0.f, 1.f));
+		TWRBar->SetFillColorAndOpacity(Col);
+	}
+	if (FuelText)
+	{
+		FuelText->SetText(FText::FromString(FString::Printf(TEXT("Fuel %.0f / %.0f kg (need %.0f)"), Manager->FuelKg, Manager->FuelMaxKg, Manager->FuelRequiredKg)));
+		const bool bFuelOk = Manager->FuelKg >= Manager->FuelRequiredKg && Manager->FuelRequiredKg > 0.f;
+		FuelText->SetColorAndOpacity(FSlateColor(MCBayUI::CheckColor(bFuelOk ? EMCCheckState::Green : EMCCheckState::Red)));
+	}
+	if (TimeText)
+	{
+		const int32 T = FMath::Max(0, FMath::FloorToInt(Manager->GetTimeLeft()));
+		TimeText->SetText(FText::FromString(FString::Printf(TEXT("%02d:%02d"), T / 60, T % 60)));
+	}
+	if (MessageText)
+	{
+		const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+		const double Now = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+		const bool bShow = !Manager->Message.IsEmpty() && (Now - Manager->MessageTime) < MessageSeconds;
+		MessageText->SetText(bShow ? FText::FromString(Manager->Message) : FText::GetEmpty());
+	}
+}

@@ -60,3 +60,6 @@ Created by `Tools/Media/create_mission_video_assets.py` (commandlet). `Config/De
 Source GLBs: `SourceArt/NASA3D_Env/`. Import script: `Tools/Env/import_env_models.py`.
 
 | `UI/WBP_ResourceGraphs` (agent D) | Live dashboard widget, 1920x1080, transparent. T/W gauge with 1.3/2.0 markers, 9 coloured bars (`Bar0..8`/`Val0..8`), `CriticalText`, `FootText`. Tick-driven `Refresh`/`SetBar`. Meant for a 3D `BP_GraphBoard` (not yet created) on the west wall. |
+
+### Hall textures (agent A)
+Source: ambientCG (https://ambientcg.com), licence CC0 1.0. `T_Hall_Wall_*` = Concrete034, `T_Hall_Floor_*` = MetalPlates006, `T_Hall_Ceiling_*` = Metal038 (1K JPG, Color + Roughness) in `Construction/Env/Textures/`; originals in `SourceArt/AmbientCG/`. Master material `Construction/Env/M_HallTiled` (world-aligned, so stretched cube walls tile correctly); instances `MI_Hall_Wall/Floor/Ceiling`.

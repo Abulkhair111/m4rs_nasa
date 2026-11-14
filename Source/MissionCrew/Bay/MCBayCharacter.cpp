@@ -1,0 +1,383 @@
+#include "Bay/MCBayCharacter.h"
+#include "Bay/MCBayUI.h"
+#include "Bay/MCBayHudWidget.h"
+#include "Bay/MCPartMover.h"
+#include "Bay/MCPartPickerWidget.h"
+#include "Construction/MCConstructionManager.h"
+#include "Construction/MCPartSocket.h"
+
+#include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "EngineUtils.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
+#include "InputAction.h"
+#include "InputActionValue.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "Engine/LocalPlayer.h"
+#include "Net/UnrealNetwork.h"
+
+AMCBayCharacter::AMCBayCharacter()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	bUseControllerRotationYaw = true; // mouse yaw turns the body; pitch only moves the camera
+
+	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+	Camera->SetupAttachment(GetCapsuleComponent());
+	Camera->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
+	Camera->bUsePawnControlRotation = true;
+
+	GetCharacterMovement()->MaxWalkSpeed = 450.f;
+	GetCharacterMovement()->JumpZVelocity = 420.f;
+	GetCharacterMovement()->AirControl = 0.4f;
+}
+
+void AMCBayCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(AMCBayCharacter, HeldTool, COND_OwnerOnly);
+}
+
+// ------------------------------------------------------------------ input
+
+void AMCBayCharacter::BuildInput()
+{
+	if (Mapping) return;
+	Mapping = NewObject<UInputMappingContext>(this, TEXT("IMC_BayRuntime"));
+
+	auto MakeAction = [this](const TCHAR* Name, EInputActionValueType Type) {
+		UInputAction* A = NewObject<UInputAction>(this, Name);
+		A->ValueType = Type;
+		return A;
+	};
+	MoveAction     = MakeAction(TEXT("IA_BayMove"), EInputActionValueType::Axis2D);
+	LookAction     = MakeAction(TEXT("IA_BayLook"), EInputActionValueType::Axis2D);
+	JumpAction     = MakeAction(TEXT("IA_BayJump"), EInputActionValueType::Boolean);
+	InteractAction = MakeAction(TEXT("IA_BayInteract"), EInputActionValueType::Boolean);
+	RemoveAction   = MakeAction(TEXT("IA_BayRemove"), EInputActionValueType::Boolean);
+	CursorAction   = MakeAction(TEXT("IA_BayCursor"), EInputActionValueType::Boolean);
+
+	// Move: X = right, Y = forward. W/S go through a YXZ swizzle.
+	auto MapMove = [this](const FKey& Key, bool bSwizzle, bool bNegate) {
+		FEnhancedActionKeyMapping& M = Mapping->MapKey(MoveAction, Key);
+		if (bSwizzle) M.Modifiers.Add(NewObject<UInputModifierSwizzleAxis>(Mapping));
+		if (bNegate)  M.Modifiers.Add(NewObject<UInputModifierNegate>(Mapping));
+	};
+	MapMove(EKeys::W, true, false);
+	MapMove(EKeys::S, true, true);
+	MapMove(EKeys::D, false, false);
+	MapMove(EKeys::A, false, true);
+
+	// Look: mouse delta; pitch is negated so pushing the mouse up looks up.
+	{
+		FEnhancedActionKeyMapping& M = Mapping->MapKey(LookAction, EKeys::Mouse2D);
+		UInputModifierNegate* N = NewObject<UInputModifierNegate>(Mapping);
+		N->bX = false; N->bY = true; N->bZ = false;
+		M.Modifiers.Add(N);
+	}
+	Mapping->MapKey(JumpAction, EKeys::SpaceBar);
+	Mapping->MapKey(InteractAction, EKeys::E);
+	Mapping->MapKey(RemoveAction, EKeys::R);
+	Mapping->MapKey(CursorAction, EKeys::Tab);
+}
+
+void AMCBayCharacter::AddMappingContext()
+{
+	BuildInput();
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !PC->IsLocalController()) return;
+	if (ULocalPlayer* LP = PC->GetLocalPlayer())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		{
+			Sub->RemoveMappingContext(Mapping);
+			FModifyContextOptions Opt;
+			Opt.bIgnoreAllPressedKeysUntilRelease = false;
+			Sub->AddMappingContext(Mapping, 0, Opt);
+		}
+	}
+}
+
+void AMCBayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	BuildInput();
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMCBayCharacter::Move);
+		EIC->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMCBayCharacter::Look);
+		EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+		EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnInteractPressed);
+		EIC->BindAction(RemoveAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnRemovePressed);
+		EIC->BindAction(CursorAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnCursorPressed);
+	}
+}
+
+void AMCBayCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+	AddMappingContext();
+	EnsureHud();
+}
+
+void AMCBayCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	AddMappingContext(); // listen server / standalone host
+	EnsureHud();
+	if (AMCConstructionManager* M = GetManager())
+	{
+		AMCPartMover::BindToManager(M);
+	}
+}
+
+void AMCBayCharacter::OnRep_Controller()
+{
+	Super::OnRep_Controller();
+	AddMappingContext(); // client: controller arrives after the pawn
+	EnsureHud();
+}
+
+void AMCBayCharacter::UnPossessed()
+{
+	if (Picker) Picker->RemoveFromParent();
+	Picker = nullptr;
+	if (Hud) Hud->RemoveFromParent();
+	Hud = nullptr;
+	Super::UnPossessed();
+}
+
+void AMCBayCharacter::Move(const FInputActionValue& Value)
+{
+	if (bCursorMode) return;
+	const FVector2D V = Value.Get<FVector2D>();
+	if (Controller)
+	{
+		const FRotator Yaw(0.f, Controller->GetControlRotation().Yaw, 0.f);
+		AddMovementInput(FRotationMatrix(Yaw).GetUnitAxis(EAxis::X), V.Y);
+		AddMovementInput(FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y), V.X);
+	}
+}
+
+void AMCBayCharacter::Look(const FInputActionValue& Value)
+{
+	if (bCursorMode) return;
+	const FVector2D V = Value.Get<FVector2D>() * LookSensitivity;
+	AddControllerYawInput(V.X);
+	AddControllerPitchInput(V.Y);
+}
+
+void AMCBayCharacter::OnCursorPressed()
+{
+	if (Picker && Picker->IsInViewport())
+	{
+		Picker->Cancel();
+		return;
+	}
+	ToggleCursorMode();
+}
+
+void AMCBayCharacter::ToggleCursorMode() { SetCursorMode(!bCursorMode); }
+
+void AMCBayCharacter::SetCursorMode(bool bEnable)
+{
+	bCursorMode = bEnable;
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !PC->IsLocalController()) return;
+	PC->SetShowMouseCursor(bEnable);
+	if (bEnable)
+	{
+		FInputModeGameAndUI Mode;
+		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(Mode);
+	}
+	else
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+}
+
+void AMCBayCharacter::EnsureHud()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!bAutoCreateHud || Hud || !PC || !PC->IsLocalController()) return;
+	TSubclassOf<UMCBayHudWidget> Cls = HudClass ? HudClass : TSubclassOf<UMCBayHudWidget>(UMCBayHudWidget::StaticClass());
+	Hud = CreateWidget<UMCBayHudWidget>(PC, Cls);
+	if (Hud) Hud->AddToViewport(10);
+}
+
+// ------------------------------------------------------------------ aim / interact
+
+AMCConstructionManager* AMCBayCharacter::GetManager() const
+{
+	if (!CachedManager) CachedManager = MCBayUI::FindManager(GetWorld());
+	return CachedManager;
+}
+
+int32 AMCBayCharacter::GetCrewRole() const
+{
+	const APlayerState* PS = GetPlayerState();
+	if (!PS) return 0;
+	if (const FProperty* P = PS->GetClass()->FindPropertyByName(TEXT("CrewRole")))
+	{
+		const void* Addr = P->ContainerPtrToValuePtr<void>(PS);
+		if (const FIntProperty* IP = CastField<FIntProperty>(P)) return IP->GetPropertyValue(Addr);
+		if (const FByteProperty* BP = CastField<FByteProperty>(P)) return BP->GetPropertyValue(Addr);
+		if (const FEnumProperty* EP = CastField<FEnumProperty>(P)) return (int32)EP->GetUnderlyingProperty()->GetSignedIntPropertyValue(Addr);
+	}
+	return 0;
+}
+
+void AMCBayCharacter::UpdateAim()
+{
+	AimedSocket = nullptr;
+	AimedActor = nullptr;
+	AimPrompt = FText::GetEmpty();
+
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || bCursorMode) return;
+
+	FVector Eye; FRotator Rot;
+	PC->GetPlayerViewPoint(Eye, Rot);
+	const FVector Dir = Rot.Vector();
+
+	float BestDot = AimConeCos;
+	for (TActorIterator<AMCPartSocket> It(GetWorld()); It; ++It)
+	{
+		const FVector To = It->GetActorLocation() - Eye;
+		const float Dist = To.Size();
+		if (Dist > SocketReach || Dist < 1.f) continue;
+		const float Dot = FVector::DotProduct(To / Dist, Dir);
+		if (Dot > BestDot) { BestDot = Dot; AimedSocket = *It; }
+	}
+
+	if (AimedSocket)
+	{
+		const AMCPartSocket* S = AimedSocket;
+		if (S->bReserved)
+		{
+			AimPrompt = FText::FromString(TEXT("Part incoming..."));
+		}
+		else if (!S->Installed)
+		{
+			AimPrompt = FText::FromString(FString::Printf(TEXT("[E] Choose a part for the %s socket"), MCBayUI::SocketTypeName(S->SocketType)));
+		}
+		else
+		{
+			AimPrompt = FText::FromString(FString::Printf(TEXT("%s%s%s\n%s\n%s"),
+				*S->Installed->DisplayName.ToString(),
+				S->bBolted ? TEXT("  [bolted]") : TEXT("  [LOOSE]"),
+				S->bGrid ? TEXT(" [wired]") : TEXT(" [not wired]"),
+				*MCBayUI::PartOneLiner(S->Installed), *MCBayUI::PartNumbers(S->Installed)));
+		}
+		return;
+	}
+
+	FHitResult Hit;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BayInteract), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye + Dir * InteractRange, ECC_Visibility, Q))
+	{
+		AimedActor = Hit.GetActor();
+		if (AimedActor) AimPrompt = FText::FromString(FString::Printf(TEXT("[E] %s"), *AimedActor->GetName()));
+	}
+}
+
+void AMCBayCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (IsLocallyControlled()) UpdateAim();
+}
+
+void AMCBayCharacter::OnInteractPressed()
+{
+	if (bCursorMode) return;
+	if (AimedSocket)
+	{
+		if (AimedSocket->bReserved) return;
+		if (!AimedSocket->Installed) { OpenPicker(AimedSocket); return; }
+		if (HeldTool != EMCToolType::None) { ServerInteract(AimedSocket); return; }
+		return;
+	}
+	if (AimedActor) ServerInteract(AimedActor);
+}
+
+void AMCBayCharacter::OnRemovePressed()
+{
+	if (bCursorMode || !AimedSocket || !AimedSocket->Installed) return;
+	ServerRemovePart(AimedSocket);
+}
+
+void AMCBayCharacter::OpenPicker(AMCPartSocket* Socket)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!Socket || !PC || !PC->IsLocalController()) return;
+	if (!Picker)
+	{
+		TSubclassOf<UMCPartPickerWidget> Cls = PickerClass ? PickerClass : TSubclassOf<UMCPartPickerWidget>(UMCPartPickerWidget::StaticClass());
+		Picker = CreateWidget<UMCPartPickerWidget>(PC, Cls);
+	}
+	if (Picker) Picker->Open(Socket, this);
+}
+
+void AMCBayCharacter::OnPickerClosed(UMCPartPickerWidget* /*Closed*/)
+{
+	SetCursorMode(false);
+}
+
+// ------------------------------------------------------------------ server RPCs
+
+void AMCBayCharacter::ServerPlacePart_Implementation(AMCPartSocket* Socket, UMCPartDef* Def)
+{
+	AMCConstructionManager* M = GetManager();
+	if (!M || !Socket || !Def) return;
+	AMCPartMover::BindToManager(M);
+	M->PlacePart(Socket, Def, (EMCCrewRole)GetCrewRole());
+}
+
+void AMCBayCharacter::ServerInteract_Implementation(AActor* Target)
+{
+	if (!Target) return;
+	// Reach check (generous for latency).
+	if (FVector::Dist(GetPawnViewLocation(), Target->GetActorLocation()) > SocketReach + InteractRange + 300.f) return;
+
+	if (AMCPartSocket* S = Cast<AMCPartSocket>(Target))
+	{
+		if (AMCConstructionManager* M = GetManager())
+		{
+			if (HeldTool != EMCToolType::None && S->Installed)
+			{
+				M->ApplyTool(S, HeldTool, (EMCCrewRole)GetCrewRole());
+			}
+		}
+		return;
+	}
+	BP_OnInteract(Target);
+}
+
+void AMCBayCharacter::ServerRelease_Implementation()
+{
+	HeldTool = EMCToolType::None;
+	BP_OnRelease();
+}
+
+void AMCBayCharacter::ServerRemovePart_Implementation(AMCPartSocket* Socket)
+{
+	AMCConstructionManager* M = GetManager();
+	if (!M || !Socket || !Socket->Installed) return;
+	AActor* Visual = Socket->InstalledActor;
+	if (M->RemovePart(Socket, (EMCCrewRole)GetCrewRole()) && Visual)
+	{
+		Visual->Destroy();
+	}
+}
+
+void AMCBayCharacter::ServerSetHeldTool_Implementation(EMCToolType Tool)
+{
+	HeldTool = Tool;
+}
