@@ -13,6 +13,7 @@ Use `ProgrammaticToolset.execute_tool_script` (sandboxed Python; only json/math/
 - `ActorTools.set_actor_transform` resets any field you omit (scale → 1). Always pass the full transform.
 - No level-creation tool: duplicate `/Engine/Maps/Templates/Template_Default`, `save_assets`, then `load_level`.
 - Import: `StaticMeshTools.import_file`, `TextureTools.import_file`. Complex glTF went through a commandlet: `UnrealEditor-Cmd.exe <uproject> -run=pythonscript -script=<py>` with Interchange (deprecated properties raise errors; use `combine_static_meshes_behavior = ALL`).
+- To put a mesh on uneven ground: move it away, `SceneTools.trace_world` down at its wheel/foot points, fit pitch/roll, then place it. UE rotator: +pitch raises local +X; +roll lowers local +Y.
 - Engine BasicShapes spheres are low-poly. Scaled up, their facets visibly bend the ground, so use a Plane for flat ground.
 - `CaptureViewport` / `CaptureEditorImage` return large base64 data. Decode it to PNG in the scratchpad and read a downscaled copy.
 - StartPIE often reports "PIE ended before warmup" while PIE is in fact running. Check with `IsPIERunning`.

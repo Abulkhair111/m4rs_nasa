@@ -8,10 +8,11 @@ _Last updated: 2026-11-14_
 - Project settings (default map, GameInstance), git + LFS.
 
 ## In progress / open
-- **Craters**: not done. Waiting for the user to choose: their own terrain model, a Landscape from a real LRO south-pole heightmap, or material-only craters (no geometry). Don't build terrain geometry without approval.
-- The user will also supply a Moon model (may replace `MoonGround`).
+- **Craters: done** with real LOLA terrain (the user chose this option on 2026-11-14). The menu camera is on a 120 m crater rim. The craters at 5 m/px are moderate; for a dramatic scene, pick a rougher window with `Tools/LOLA/dem_scan.py` or use LDEM_875S near Shackleton.
+- For `L_Mission`, plan to build a Landscape from the `.r16` (has collision and LODs), which is better for driving the rover.
+- Git remote: none yet. Ask the user for the URL, then run `git remote add origin <url>` and `git push -u origin main`.
 - LAN session browser in the main menu, built by **another agent**. Its state is unknown; it touched `BP_MC_GameInstance`, `WBP_MainMenu` and `WBP_LanSessionRow`.
-- Git remote not configured yet (no `gh` CLI). Ask the user for the remote URL.
+- The other agent is building the lobby (`BP_MC_GameMode`, `BP_LobbyHUD` showed up in autosaves on 2026-11-14) and an IP-join row in the menu.
 
 ## Next
 1. `L_Lobby`: role selection (4 unique roles), replicated PlayerState, ready flags, host Start.

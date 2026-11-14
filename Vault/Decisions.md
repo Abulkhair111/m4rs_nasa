@@ -10,5 +10,6 @@
 | 2026-11-14 | Crash = −100 → score 0 (assumed) | Design said "Крушение: 100"; not yet confirmed. |
 | 2026-11-14 | **Claude must not create 3D models; ask instead** | User rule (CLAUDE.md). The team supplies models. |
 | 2026-11-14 | Moon ground = flat engine plane + CC0 regolith material | Low-poly sphere looked faceted and made the rover float. |
+| 2026-11-14 | **Moon terrain from real NASA LOLA DEM** (user approved), static mesh for the menu | Real craters and on theme. Low sun because the south pole sun is always near the horizon. Replaces the flat plane. |
 | 2026-11-14 | Rover Nanite disabled | Project lacks SM6. Alternative: enable SM6 in Project Settings → Platforms → Windows. |
 | 2026-11-14 | Git + LFS, source art in `SourceArt/` | Binary assets; avoid accidental auto-import. |
