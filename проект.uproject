@@ -2,6 +2,14 @@
 	"FileVersion": 3,
 	"EngineAssociation": "{2A3A5D7D-447D-07DA-5FBE-C6AA2D3B6BF6}",
 	"Category": "",
+	"Modules": [
+		{
+			"Name": "MissionCrew",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine" ]
+		}
+	],
 	"Description": "",
 	"Plugins": [
 		{

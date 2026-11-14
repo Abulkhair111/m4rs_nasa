@@ -1,6 +1,6 @@
 # Mission Crew — instructions for Claude
 
-NASA Space Apps 2026 game, UE 5.8, Blueprint-only, editor driven via unreal-mcp.
+NASA Space Apps 2026 game, UE 5.8, editor driven via unreal-mcp. **Logic is moving to C++ (user decision 2026-11-14)**: new gameplay code goes in `Source/`, Blueprints stay for assets, widgets' layout and the existing lobby/menu. Visual Studio 2022 (MSVC 14.44) is installed. Build only with the editor closed.
 
 ## Start here
 - **Read `Vault/00 Index.md` first**, then only the vault notes your task needs. Don't scan `Content/`, the logs, or the whole repo to orient yourself, and don't re-read the design PDFs. `Vault/Game Design.md` summarises them.
