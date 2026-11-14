@@ -18,3 +18,4 @@ Use `ProgrammaticToolset.execute_tool_script` (sandboxed Python; only json/math/
 - `CaptureViewport` / `CaptureEditorImage` return large base64 data. Decode it to PNG in the scratchpad and read a downscaled copy.
 - StartPIE often reports "PIE ended before warmup" while PIE is in fact running. Check with `IsPIERunning`.
 - **Concurrency:** another agent may use the same MCP server. Check `Saved/Logs/проект.log` for `Dispatching toolset tool` lines that aren't yours before editing shared Blueprints.
+- If saving fails with 'file is read-only': Git LFS `lockable` makes files read-only. It has been removed from .gitattributes; clear the flag with `attrib -R`.
