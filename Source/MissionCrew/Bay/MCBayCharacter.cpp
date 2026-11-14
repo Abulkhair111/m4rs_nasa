@@ -1,11 +1,14 @@
 #include "Bay/MCBayCharacter.h"
 #include "Bay/MCBayUI.h"
+#include "Bay/MCBodyAnimComponent.h"
 #include "Bay/MCBayHudWidget.h"
 #include "Bay/MCPartMover.h"
 #include "Bay/MCPartPickerWidget.h"
 #include "Bay/MCRocketStack.h"
+#include "Bay/UI/MCBayMenuWidget.h"
 #include "Construction/MCConstructionManager.h"
 #include "Construction/MCPartSocket.h"
+#include "Interact/MCInteractable.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -31,6 +34,8 @@ AMCBayCharacter::AMCBayCharacter()
 	Camera->SetupAttachment(GetCapsuleComponent());
 	Camera->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
 	Camera->bUsePawnControlRotation = true;
+
+	BodyAnim = CreateDefaultSubobject<UMCBodyAnimComponent>(TEXT("BodyAnim"));
 
 	GetCharacterMovement()->MaxWalkSpeed = 450.f;
 	GetCharacterMovement()->JumpZVelocity = 420.f;
@@ -61,6 +66,8 @@ void AMCBayCharacter::BuildInput()
 	InteractAction = MakeAction(TEXT("IA_BayInteract"), EInputActionValueType::Boolean);
 	RemoveAction   = MakeAction(TEXT("IA_BayRemove"), EInputActionValueType::Boolean);
 	CursorAction   = MakeAction(TEXT("IA_BayCursor"), EInputActionValueType::Boolean);
+	DropAction     = MakeAction(TEXT("IA_BayDrop"), EInputActionValueType::Boolean);
+	MenuAction     = MakeAction(TEXT("IA_BayMenu"), EInputActionValueType::Boolean);
 
 	// Move: X = right, Y = forward. W/S go through a YXZ swizzle.
 	auto MapMove = [this](const FKey& Key, bool bSwizzle, bool bNegate) {
@@ -84,6 +91,9 @@ void AMCBayCharacter::BuildInput()
 	Mapping->MapKey(InteractAction, EKeys::E);
 	Mapping->MapKey(RemoveAction, EKeys::R);
 	Mapping->MapKey(CursorAction, EKeys::Tab);
+	Mapping->MapKey(DropAction, EKeys::G);
+	Mapping->MapKey(MenuAction, EKeys::Escape);
+	Mapping->MapKey(MenuAction, EKeys::P); // Esc stops PIE inside the editor, so P works too
 }
 
 void AMCBayCharacter::AddMappingContext()
@@ -114,8 +124,11 @@ void AMCBayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnInteractPressed);
+		EIC->BindAction(InteractAction, ETriggerEvent::Completed, this, &AMCBayCharacter::OnInteractReleased);
+		EIC->BindAction(DropAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnDropPressed);
 		EIC->BindAction(RemoveAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnRemovePressed);
 		EIC->BindAction(CursorAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnCursorPressed);
+		EIC->BindAction(MenuAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnMenuPressed);
 	}
 }
 
@@ -148,6 +161,7 @@ void AMCBayCharacter::UnPossessed()
 {
 	if (Picker) Picker->RemoveFromParent();
 	Picker = nullptr;
+	if (Menu) { Menu->Close(); Menu = nullptr; }
 	if (Hud) Hud->RemoveFromParent();
 	Hud = nullptr;
 	Super::UnPossessed();
@@ -181,6 +195,22 @@ void AMCBayCharacter::OnCursorPressed()
 		return;
 	}
 	ToggleCursorMode();
+}
+
+void AMCBayCharacter::OnMenuPressed()
+{
+	if (Picker && Picker->IsInViewport())
+	{
+		Picker->Cancel(); // Esc / P closes the picker first
+		return;
+	}
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !PC->IsLocalController()) return;
+	if (!Menu)
+	{
+		Menu = CreateWidget<UMCBayMenuWidget>(PC, MenuClass ? MenuClass : TSubclassOf<UMCBayMenuWidget>(UMCBayMenuWidget::StaticClass()));
+	}
+	if (Menu) Menu->Toggle();
 }
 
 void AMCBayCharacter::ToggleCursorMode() { SetCursorMode(!bCursorMode); }
@@ -235,25 +265,30 @@ int32 AMCBayCharacter::GetCrewRole() const
 	return 0;
 }
 
-static FText MakeSocketPrompt(const AMCPartSocket* S, bool bSwapHint)
+static FText MakeSocketPrompt(const AMCPartSocket* S, EMCToolType Tool)
 {
 	if (S->bReserved) return FText::FromString(TEXT("Part incoming..."));
 	if (!S->Installed)
 	{
 		return FText::FromString(FString::Printf(TEXT("[E] Choose a part for the %s socket"), MCBayUI::SocketTypeName(S->SocketType)));
 	}
+	FString Hint;
+	if (Tool == EMCToolType::Wrench) Hint = S->bBolted ? TEXT("\n[E] Loosen the bolts") : TEXT("\n[E] Tighten the bolts");
+	else if (Tool == EMCToolType::Cable) Hint = S->IsSelfPowered() ? TEXT("\n(needs no cable)") : (S->bGrid ? TEXT("\n[E] Disconnect the cable") : TEXT("\n[E] Connect the cable"));
+	else if (!S->bBolted) Hint = TEXT("\n[E] Swap this part   [R] Remove");
+	else Hint = TEXT("\nBolted: take the wrench from the tools stand to loosen it");
 	return FText::FromString(FString::Printf(TEXT("%s%s%s\n%s\n%s%s"),
 		*S->Installed->DisplayName.ToString(),
 		S->bBolted ? TEXT("  [bolted]") : TEXT("  [LOOSE]"),
-		S->bGrid ? TEXT(" [wired]") : TEXT(" [not wired]"),
-		*MCBayUI::PartOneLiner(S->Installed), *MCBayUI::PartNumbers(S->Installed),
-		bSwapHint ? TEXT("\n[E] Swap this part   [R] Remove") : TEXT("")));
+		S->IsSelfPowered() ? TEXT("") : (S->bGrid ? TEXT(" [wired]") : TEXT(" [not wired]")),
+		*MCBayUI::PartOneLiner(S->Installed), *MCBayUI::PartNumbers(S->Installed), *Hint));
 }
 
 void AMCBayCharacter::UpdateAim()
 {
 	AimedSocket = nullptr;
 	AimedActor = nullptr;
+	AimedInteractable = nullptr;
 	bAimedViaStack = false;
 	bAimedLauncherPart = false;
 	AimPrompt = FText::GetEmpty();
@@ -264,6 +299,22 @@ void AMCBayCharacter::UpdateAim()
 	FVector Eye; FRotator Rot;
 	PC->GetPlayerViewPoint(Eye, Rot);
 	const FVector Dir = Rot.Vector();
+
+	// World interactables (buttons, levers, pumps, tool stand) win over everything else: short trace, Visibility channel.
+	{
+		FHitResult IHit;
+		FCollisionQueryParams IQ(SCENE_QUERY_STAT(BayInteractable), false, this);
+		if (GetWorld()->LineTraceSingleByChannel(IHit, Eye, Eye + Dir * InteractRange, ECC_Visibility, IQ))
+		{
+			if (AMCInteractable* I = Cast<AMCInteractable>(IHit.GetActor()))
+			{
+				AimedInteractable = I;
+				AimedActor = I;
+				AimPrompt = I->GetPromptFor(this);
+				return;
+			}
+		}
+	}
 
 	// Pieces of the real rocket and of the wall display (long range, line of sight needed).
 	{
@@ -294,7 +345,7 @@ void AMCBayCharacter::UpdateAim()
 			{
 				AimedSocket = Best.Socket;
 				bAimedViaStack = true;
-				AimPrompt = MakeSocketPrompt(AimedSocket, true);
+				AimPrompt = MakeSocketPrompt(AimedSocket, HeldTool);
 				return;
 			}
 		}
@@ -312,23 +363,25 @@ void AMCBayCharacter::UpdateAim()
 
 	if (AimedSocket)
 	{
-		AimPrompt = MakeSocketPrompt(AimedSocket, AimedSocket->GetGroup() == EMCStackGroup::Ascent);
+		AimPrompt = MakeSocketPrompt(AimedSocket, HeldTool);
 		return;
 	}
 
-	FHitResult Hit;
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(BayInteract), false, this);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye + Dir * InteractRange, ECC_Visibility, Q))
-	{
-		AimedActor = Hit.GetActor();
-		if (AimedActor) AimPrompt = FText::FromString(FString::Printf(TEXT("[E] %s"), *AimedActor->GetName()));
-	}
+	// Nothing else to aim at: plain scenery gets no prompt.
 }
 
 void AMCBayCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (IsLocallyControlled()) UpdateAim();
+	if (IsLocallyControlled())
+	{
+		UpdateAim();
+		if (HeldTool != EMCToolType::None)
+		{
+			const FString Held = FString::Printf(TEXT("Holding: %s   [G] put down"), HeldTool == EMCToolType::Wrench ? TEXT("wrench (bolts)") : TEXT("cable reel (wires)"));
+			AimPrompt = AimPrompt.IsEmpty() ? FText::FromString(Held) : FText::FromString(AimPrompt.ToString() + TEXT("\n") + Held);
+		}
+	}
 }
 
 void AMCBayCharacter::OnInteractPressed()
@@ -345,11 +398,26 @@ void AMCBayCharacter::OnInteractPressed()
 		if (AimedSocket->bReserved) return;
 		if (!AimedSocket->Installed) { OpenPicker(AimedSocket); return; }
 		if (HeldTool != EMCToolType::None) { ServerInteract(AimedSocket); return; }
-		// Installed ascent part (aimed on the rocket or its socket): open the picker to swap it.
-		if (bAimedViaStack || AimedSocket->GetGroup() == EMCStackGroup::Ascent) OpenPicker(AimedSocket);
+		// Installed part, no tool: unbolted = pick another one (swap); bolted = the server says to unbolt first.
+		if (!AimedSocket->bBolted) OpenPicker(AimedSocket);
+		else ServerRemovePart(AimedSocket);
 		return;
 	}
+	if (AimedInteractable) { bHoldingInteract = true; ServerInteract(AimedInteractable); return; }
 	if (AimedActor) ServerInteract(AimedActor);
+}
+
+void AMCBayCharacter::OnInteractReleased()
+{
+	if (!bHoldingInteract) return;
+	bHoldingInteract = false;
+	ServerEndInteract();
+}
+
+void AMCBayCharacter::OnDropPressed()
+{
+	if (bCursorMode) return;
+	ServerRelease();
 }
 
 void AMCBayCharacter::OnRemovePressed()
@@ -402,12 +470,27 @@ void AMCBayCharacter::ServerInteract_Implementation(AActor* Target)
 		}
 		return;
 	}
+	if (AMCInteractable* I = Cast<AMCInteractable>(Target))
+	{
+		if (ActiveInteractable && ActiveInteractable != I) ActiveInteractable->Release(this);
+		ActiveInteractable = I;
+		I->Use(this);
+		return;
+	}
 	BP_OnInteract(Target);
+}
+
+void AMCBayCharacter::ServerEndInteract_Implementation()
+{
+	if (ActiveInteractable) ActiveInteractable->Release(this);
+	ActiveInteractable = nullptr;
 }
 
 void AMCBayCharacter::ServerRelease_Implementation()
 {
 	HeldTool = EMCToolType::None;
+	if (ActiveInteractable) ActiveInteractable->Release(this);
+	ActiveInteractable = nullptr;
 	BP_OnRelease();
 }
 

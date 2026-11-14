@@ -35,6 +35,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") float PhaseDurationSec = 600.f;
 	/** InRole 0 / free-for-all (solo testing): every role may do everything. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bFreeRoles = true;
+	/** Server: StartPhase() on BeginPlay when the map name contains "AssemblyBay". Calling StartPhase again is harmless. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bAutoStart = true;
 	/** Rocket options (levers). Values are placeholders until the design doc fixes them. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") TArray<FMCRocketDef> Rockets;
 	/** All selectable part definitions (tools excluded automatically by ToolType). */
@@ -116,6 +118,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Construction") TArray<UMCPartDef*> GetCandidates(EMCSocketType SocketType, EMCCrewRole InRole, EMCStackGroup Group) const;
 	/** Predicted totals if Def were installed, bolted and wired. Uses the replicated totals, so it works on clients. */
 	UFUNCTION(BlueprintCallable, Category = "Construction") FMCPreviewResult Preview(const UMCPartDef* Def) const;
+	/** Agent I2: like Preview, but NewDef replaces OldDef (the installed part of the socket), so the old part is subtracted. OldDef may be null. */
+	UFUNCTION(BlueprintCallable, Category = "Construction") FMCPreviewResult PreviewSwap(const UMCPartDef* NewDef, const UMCPartDef* OldDef) const;
 	UFUNCTION(BlueprintPure, Category = "Construction") bool RoleAllowed(EMCCrewRole InRole, int32 RequiredDepartment) const;
 
 	// ---------------- Server API (call from pawn/controller RPCs; all guard HasAuthority) ----------------

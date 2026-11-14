@@ -1,0 +1,3 @@
+Earth_BlueMarble_2k.jpg: NASA SVS 3615 (Blue Marble, no clouds) https://svs.gsfc.nasa.gov/vis/a000000/a003600/a003615/earth_noClouds.0330.jpg. NASA, public domain.
+Moon_LRO_2k.jpg: NASA SVS 4720 CGI Moon Kit, LROC colour mosaic 2K https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg. NASA/GSFC/ASU, public domain.
+No NASA 3D mesh of Earth or Moon exists in nasa/NASA-3D-Resources (only photo textures); textures are applied to an engine sphere as a material. No LOLA heightmaps used.

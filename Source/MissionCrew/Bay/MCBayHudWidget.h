@@ -24,6 +24,9 @@ class MISSIONCREW_API UMCBayHudWidget : public UUserWidget
 public:
 	UFUNCTION(BlueprintCallable, Category = "HUD") void Refresh();
 
+	/** Controls hint line (bottom left). Optional widget name HintText. */
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> HintText;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "HUD") FText HintString = FText::FromString(TEXT("WASD move | Mouse look | Space jump | E interact | R remove | Tab cursor | Esc menu"));
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TWRText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> FuelText;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> MessageText;

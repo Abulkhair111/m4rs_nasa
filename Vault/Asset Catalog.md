@@ -161,3 +161,53 @@ No better textured launch vehicle with a redistributable licence could be downlo
 - Textures: ambientCG Foil002 (gold), Foil001 (dark), Metal027 (dark anodised), CC0 1.0, 1K JPG; originals + `SOURCES.txt` in `SourceArt/AmbientCG_Rocket/`.
 - Assigned (mesh slots): `Web/NASA_SLS_Block1/SLS_Block1` -> `MI_Rocket_SLS` (orange core, white boosters/top, dark engine section); `Rocket/SaturnV_S1_Lower` and `S1_Upper` -> WhiteRoll, `S2/S3/LemShroud/ServiceModule/Fin` -> White, `Interstage` -> BlackGloss, `CommandModule` -> Silver, `EscapeTower` -> WhiteRollSmall; `Shuttle_ExternalTank` body/nose -> OrangeFoam, fittings/lines -> EngineMetal; `Shuttle_SRB` -> White; `Shuttle_RS25` bell in -> DarkMetal, out -> Bronze; `Orion_CrewModule` -> White. Not repainted: Kenney (cartoon, already coloured), ESAS/Gemini (textured), the skeletal `NASA/SaturnV/SaturnV` (original NASA texture, hidden on the pad now).
 - **Pad launcher:** `Maquette_Rocket_SLS` (StaticMeshActor, `SLS_Block1`, loc 900,-750,298, scale 0.28 = 27.5 m tall, 6.3 x 3.2 m, upright on the pad) replaces the Saturn V skeletal actor; the old actor `SkeletalMeshActor_0` is hidden (bHidden) in folder `Maquette/Rocket_OldSaturnV_hidden`. Maquette lander moved from the rocket top to the floor at (470,-750,-2).
+
+## C++ part defs (Agent P1, 2026-11-14) - `/Game/MissionCrew/Construction/Data/MC/`
+Class `UMCPartDef`, one per old Blueprint `DA_Part_*`; values copied 1:1 from the DAs (the old DAs are untouched). The BP `meshRotation` became `StackMeshRotation` (also applies to the `Mesh` fallback). Lander parts have no `StackMesh` (shelf `Mesh`+`MeshScale` is used). Ascent parts have `StackMesh`, `StackMeshScale` 1 and `StackHeightCm` (uniform fit, radius measured from the mesh); the stack is auto-scaled by `DisplayScale`.
+
+| Old DA | New asset | Group | Notes |
+|---|---|---|---|
+| DA_Part_SolarSmall / SolarLarge | MCP_SolarSmall / MCP_SolarLarge | Lander | rot 90,0,0 |
+| DA_Part_RTG | MCP_RTG | Lander | |
+| DA_Part_BatterySmall / BatteryLarge | MCP_BatterySmall / MCP_BatteryLarge | Lander | |
+| DA_Part_AntennaLow / AntennaHigh | MCP_AntennaLow / MCP_AntennaHigh | Lander | |
+| DA_Part_Lidar | MCP_Lidar | Lander | rot 0,90,0 |
+| DA_Part_NIRVSS / NSS / MSolo / Camera | MCP_NIRVSS / MCP_NSS / MCP_MSolo / MCP_Camera | Lander | science |
+| DA_Part_Drill | MCP_Drill | Lander | Engine Cylinder placeholder |
+| DA_Part_Rover | MCP_Rover | Lander | |
+| DA_Tool_Wrench / DA_Tool_Cable | MCP_ToolWrench / MCP_ToolCable | (tool) | ToolType Wrench / Cable, SocketType Tool |
+| DA_Part_EngineBasic | MCP_EngineBasic | Ascent | StackKind Engine, BE7, 172 cm |
+| DA_Part_EngineThrottle | MCP_EngineThrottle | Ascent | Engine, Apollo DPS, 258 cm |
+| DA_Part_TankSmall / TankLarge | MCP_TankSmall / MCP_TankLarge | Ascent | Tank, SaturnV_S1_Upper, 260 / 460 cm |
+
+New defs (all numbers TBD placeholders, flagged in the Description), all Group Ascent:
+| Asset | Socket / StackKind | Mesh | StackHeightCm | Mass / cost / other |
+|---|---|---|---|---|
+| MCP_TankMedium | Tank / Tank | SaturnV_S1_Upper | 360 | 48 kg, $8M, fuel 850 kg, dept 3 |
+| MCP_BoosterSRB | Booster / Booster, radial x2 | Shuttle_SRB | 600 | 80 kg, $12M, thrust 9000 N, heavy, dept 3 |
+| MCP_BoosterSRBShort | Booster / Booster, radial x2 | Shuttle_SRB | 400 | 45 kg, $7M, thrust 5000 N, dept 3 |
+| MCP_Decoupler | Structure / Decoupler | SaturnV_Interstage | 250 | 12 kg, $3M, dept 2 |
+| MCP_Capsule | Structure / Capsule | Orion_CrewModule | 160 | 30 kg, $15M, dept 2 |
+| MCP_Fairing | Structure / Fairing | SaturnV_LemShroud | 220 | 18 kg, $5M, dept 2 |
+
+Launcher presets (`UMCRocketPreset`, `Data/MC/Presets/`; preset part defs `MCP_Preset_Stage1` S1_Lower 700 cm, `_Interstage` 150 cm, `_SideSRB` Shuttle_SRB 450 cm, `_SideCore` Shuttle_SRB 700 cm, not in the Catalog; stand-in meshes, no Falcon/Vulcan model exists):
+| Asset | LauncherName | CoreParts | Radial |
+|---|---|---|---|
+| MCP_Preset_Falcon9 | Falcon 9 | Stage1 | none |
+| MCP_Preset_Vulcan | Vulcan | Stage1, Interstage | SideSRB x2 |
+| MCP_Preset_FalconHeavy | Falcon Heavy | Stage1, Interstage | SideCore x2 |
+
+Not created (no model, rule: don't invent geometry): lander gear/legs part (Apollo LM has its own legs), a separate lidar/RTG variant. Ascent set `Catalog` for the manager = the 10 MCP ascent/lander defs above (assign to `Catalog` + `LauncherPresets` in the manager).
+
+## Player bodies (Agent Q, 2026-11-14) - `Art/Meshes/Players/Z2Suit/`
+- Source: NASA 3D Resources "Z2 Spacesuit" (`3D Models/Z2 Spacesuit/Z2 Spacesuit.glb`, public domain). `SourceArt/NASA3D_Players/Z2Suit/` (GLB, FBX, `SOURCES.txt`, `Z2Suit_tex/` 1K PNGs). Also downloaded but unused: `SourceArt/NASA3D_Players/Astronaut/Astronaut.glb` (NASA "Astronaut", 6k tris, T-pose, 2 flat materials; no rig, so rejected as a player body, usable as a decoration).
+- Converter: `Tools/WebModels/glb_to_fbx.py` with scale 0.9346 (-> 180 cm tall, origin at the feet centre of the bounding box); `Tools/Players/render_check.py` makes Blender front/side/top previews of a GLB.
+- `Z2Suit` (StaticMesh, 31k tris, no rig, relaxed pose, ~181 cm, X +-37 / Y +-48 after import: the model faces +/-Y in UE, see the yaw note below). Material slot `Baked` -> `MI_Player_Neutral`. Texture `T_Z2_Color`.
+- `M_PlayerSuit` (master: base colour = `Color` texture x lerp(white, `Accent`, `Strength` 0.65)); instances `MI_Player_Neutral` (Strength 0), `MI_Player_Power` (yellow), `MI_Player_Construction` (cyan), `MI_Player_Propulsion` (orange), `MI_Player_Science` (green) = CrewRole 0..4.
+- `Construction/Blueprints/BP_MC_BayPlayer` (child of `AMCBayCharacter`): see Status "Agent Q update": component `Body` = SkeletalMesh `SciFiAstronaut/SK_SciFiAstronaut` (rigged, CC0 Quaternius, 24 anims, role accent MIs `MI_Astro_Accent_*`), var `RoleMaterials`, Tick SetMaterial by CrewRole. `BP_MC_BayGameMode.DefaultPawnClass` = `BP_MC_BayPlayer_C`.
+
+## Space assets (agent S2d, 2026-11-15) - `Art/Meshes/Space/`, `Art/Textures/Space/`
+- `Space/M_PlanetTex` (Tex, Glow, emissive+base colour), `MI_Earth` (`Textures/T_Earth_BlueMarble_2k`, NASA SVS 3615 Blue Marble no clouds, 2K), `MI_Moon` (`Textures/T_Moon_LRO_2k`, NASA SVS 4720 LROC mosaic 2K). Apply to `/Engine/BasicShapes/Sphere` (UV equirect, prime meridian seam faces -X unless rotated; Earth preview uses yaw -90). No NASA Earth/Moon mesh exists. Public domain. Source: `SourceArt/NASA_Planets/SOURCES.txt`.
+- `Space/M_SkyTex` (unlit, two-sided, Tex + Intensity), `MI_Sky_Stars`, `MI_Sky_Nebula`; textures `Art/Textures/Space/T_Sky_PlainStarfield_4k`, `T_Sky_BlueNebulae_4k` (4K copies of 8K PNG). **Credit "Space Spheremaps"** (https://space-spheremaps.itch.io/space-spheremaps, https://www.spacespheremaps.com; free incl. commercial, attribution appreciated, no AI scraping). Originals incl. `hazy_nebulae_1` and `ringed_gas_giant_planet` in `SourceArt/SpaceSpheremaps/` (not imported).
+- Level `Maps/L_Transit`: flight deck, layout in [[Status]] "Agent S2d".
+- Animated body (current): `Art/Meshes/Players/SciFiAstronaut/` = `SK_SciFiAstronaut` + Skeleton + 24 `..._Anim_CharacterArmature_CharacterArmature_<Name>` sequences + `M_PlayerFlat`, `MI_Astro_*`. Quaternius CC0, source `SourceArt/NASA3D_Players/SciFiAstronaut/`. Details and the animation-to-property table: [[Status]] "Agent Q update".

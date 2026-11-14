@@ -1,0 +1,8 @@
+Space Spheremaps - free space sphere maps (4 equirectangular 8192x4096 PNG)
+URL: https://space-spheremaps.itch.io/space-spheremaps
+Author: Space Spheremaps (https://www.spacespheremaps.com)
+Licence (per the itch.io page): free to use for personal, prototype and commercial projects. No generative AI was used.
+Attribution is not required but appreciated: credit "Space Spheremaps" in the game credits.
+Files: blue_nebulae_1.png, hazy_nebulae_1.png, plain_starfield_1.png, ringed_gas_giant_planet.png
+Downloaded 2026-11-15 through the normal free itch.io download flow (no login).
+Not downloaded: the second pack "Pixelart Starfields" (2D pixel-art starfields, not needed).

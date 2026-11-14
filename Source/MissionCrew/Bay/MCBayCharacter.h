@@ -19,9 +19,12 @@ class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
 class AMCPartSocket;
+class AMCInteractable;
 class AMCConstructionManager;
 class UMCPartPickerWidget;
 class UMCBayHudWidget;
+class UMCBayMenuWidget;
+class UMCBodyAnimComponent;
 
 UCLASS(Blueprintable)
 class MISSIONCREW_API AMCBayCharacter : public ACharacter
@@ -41,6 +44,8 @@ public:
 
 	// ---- Config ----
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bay") TObjectPtr<UCameraComponent> Camera;
+	/** Single-node body animation / procedural fallback (agent W). Assign sequences in the Blueprint child. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bay") TObjectPtr<UMCBodyAnimComponent> BodyAnim;
 	/** Line trace length for non-socket targets (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay") float InteractRange = 350.f;
 	/** Max distance from the eye to a socket that can be aimed at (cm). */
@@ -52,11 +57,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay|UI") TSubclassOf<UMCPartPickerWidget> PickerClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay|UI") TSubclassOf<UMCBayHudWidget> HudClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay|UI") bool bAutoCreateHud = true;
+	/** Optional Blueprint child of the pause menu. Null = code fallback. Esc or P toggles it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bay|UI") TSubclassOf<UMCBayMenuWidget> MenuClass;
 
 	// ---- State ----
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") bool bCursorMode = false;
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") TObjectPtr<AMCPartSocket> AimedSocket;
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") TObjectPtr<AActor> AimedActor;
+	/** Aimed at a world interactable (button, lever, pump, tool stand). Also stored in AimedActor. */
+	UPROPERTY(BlueprintReadOnly, Category = "Bay") TObjectPtr<AMCInteractable> AimedInteractable;
 	/** AimedSocket came from aiming at a drawn piece of a rocket stack (real or wall display), not from the socket cone. */
 	UPROPERTY(BlueprintReadOnly, Category = "Bay") bool bAimedViaStack = false;
 	/** Aiming at launcher-preset hardware (core stage / main boosters): E cycles to the next launcher. */
@@ -80,7 +89,10 @@ public:
 	// ---- Server RPCs (no more 'set Run on Server by hand') ----
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerPlacePart(AMCPartSocket* Socket, UMCPartDef* Def);
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerInteract(AActor* Target);
+	/** Drop the held tool (G). Also ends any hold interaction. */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerRelease();
+	/** E released: ends a hold interaction (fuel pump). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerEndInteract();
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerRemovePart(AMCPartSocket* Socket);
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSetHeldTool(EMCToolType Tool);
 	/** Swap the installed part of a socket for another one (remove + place; the old part is restored if the new one is refused). */
@@ -102,9 +114,14 @@ protected:
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 	void OnInteractPressed();
+	void OnInteractReleased();
+	void OnDropPressed();
 	void OnRemovePressed();
 	void OnCursorPressed();
+	void OnMenuPressed();
 
+	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
+	UPROPERTY() TObjectPtr<UMCBayMenuWidget> Menu;
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> LookAction;
@@ -112,6 +129,10 @@ protected:
 	UPROPERTY() TObjectPtr<UInputAction> InteractAction;
 	UPROPERTY() TObjectPtr<UInputAction> RemoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> CursorAction;
+	UPROPERTY() TObjectPtr<UInputAction> DropAction;
+	/** Server: interactable currently held with E. Client: E is down on an interactable. */
+	UPROPERTY() TObjectPtr<AMCInteractable> ActiveInteractable;
+	bool bHoldingInteract = false;
 
 	UPROPERTY() TObjectPtr<UMCPartPickerWidget> Picker;
 	UPROPERTY() TObjectPtr<UMCBayHudWidget> Hud;

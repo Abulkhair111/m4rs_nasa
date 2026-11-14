@@ -94,6 +94,10 @@ void AMCConstructionManager::BeginPlay()
 	{
 		DiscoverSockets();
 		Recalc();
+		if (bAutoStart && !bActive && GetWorld() && GetWorld()->GetMapName().Contains(TEXT("AssemblyBay")))
+		{
+			StartPhase();
+		}
 	}
 }
 
@@ -145,35 +149,54 @@ TArray<UMCPartDef*> AMCConstructionManager::GetCandidates(EMCSocketType SocketTy
 
 FMCPreviewResult AMCConstructionManager::Preview(const UMCPartDef* Def) const
 {
+	return PreviewSwap(Def, nullptr);
+}
+
+// ---- Agent I2: swap-aware preview. Same maths as a plain install, but OldDef (the part being replaced) is subtracted. ----
+FMCPreviewResult AMCConstructionManager::PreviewSwap(const UMCPartDef* Def, const UMCPartDef* OldDef) const
+{
 	FMCPreviewResult R;
 	if (!Def) { return R; }
 
 	const bool bAsc = Def->GetStackGroup() == EMCStackGroup::Ascent;
 	R.Group = Def->GetStackGroup();
+	// Old part contributions (zero when this is a plain install or the old part is in the other group).
+	const bool bOld = OldDef != nullptr;
+	const bool bOldAsc = bOld && OldDef->GetStackGroup() == EMCStackGroup::Ascent;
+	auto OldVal = [&](float UMCPartDef::* Field) { return bOld ? OldDef->*Field : 0.f; };
+	const float OldMass = OldVal(&UMCPartDef::MassKg), OldCost = OldVal(&UMCPartDef::CostM), OldPower = OldVal(&UMCPartDef::PowerW);
+	const float OldThrust = OldVal(&UMCPartDef::ThrustN), OldFuelCap = OldVal(&UMCPartDef::FuelCapKg);
+	const float OldStorage = OldVal(&UMCPartDef::StorageWh), OldScience = OldVal(&UMCPartDef::ScienceValue);
+	const float DMass = Def->MassKg - OldMass, DCost = Def->CostM - OldCost, DPower = Def->PowerW - OldPower;
+	const float DThrust = Def->ThrustN - OldThrust, DFuelCap = Def->FuelCapKg - OldFuelCap;
 
-	const float DryNew = DryMassKg + Def->MassKg;
-	const float FuelMaxNew = FuelMaxKg + Def->FuelCapKg;
+	const float DryNew = DryMassKg + DMass;
+	const float FuelMaxNew = FuelMaxKg + DFuelCap;
 	const float FuelNew = FMath::Min(FuelKg, FuelMaxNew);
 	R.TotalMassKg = DryNew + FuelNew; // take-off mass: lander + ascent
-	R.TotalCostM = TotalCostM + Def->CostM;
+	R.TotalCostM = TotalCostM + DCost;
 	R.bAffordable = R.TotalCostM <= BudgetM;
 
 	// Group sub-results. Mass of the group that does not receive the part is unchanged.
-	R.Lander.MassKg = LanderTotals.MassKg + (bAsc ? 0.f : Def->MassKg);
-	R.Lander.CostM = LanderTotals.CostM + (bAsc ? 0.f : Def->CostM);
-	R.Lander.PowerBalance = (LanderTotals.PowerGenW - LanderTotals.PowerUseW) + (bAsc ? 0.f : Def->PowerW);
-	R.Lander.ScienceValue = LanderTotals.ScienceValue + (bAsc ? 0.f : Def->ScienceValue);
-	R.Lander.IceCount = LanderTotals.IceCount + ((!bAsc && Def->bIceCapable) ? 1 : 0);
-	R.Ascent.MassKg = AscentTotals.MassKg + (bAsc ? Def->MassKg : 0.f);
-	R.Ascent.CostM = AscentTotals.CostM + (bAsc ? Def->CostM : 0.f);
-	R.Ascent.ThrustN = AscentTotals.ThrustN + (bAsc ? Def->ThrustN : 0.f);
-	R.Ascent.FuelMaxKg = AscentTotals.FuelMaxKg + (bAsc ? Def->FuelCapKg : 0.f);
-	R.Ascent.BoosterCount = AscentTotals.BoosterCount + ((bAsc && Def->SocketType == EMCSocketType::Booster) ? 1 : 0);
+	R.Lander.MassKg = LanderTotals.MassKg + (bAsc ? 0.f : Def->MassKg) - (bOld && !bOldAsc ? OldMass : 0.f);
+	R.Lander.CostM = LanderTotals.CostM + (bAsc ? 0.f : Def->CostM) - (bOld && !bOldAsc ? OldCost : 0.f);
+	R.Lander.PowerBalance = (LanderTotals.PowerGenW - LanderTotals.PowerUseW) + (bAsc ? 0.f : Def->PowerW) - (bOld && !bOldAsc ? OldPower : 0.f);
+	R.Lander.ScienceValue = LanderTotals.ScienceValue + (bAsc ? 0.f : Def->ScienceValue) - (bOld && !bOldAsc ? OldScience : 0.f);
+	R.Lander.IceCount = LanderTotals.IceCount + ((!bAsc && Def->bIceCapable) ? 1 : 0) - ((bOld && !bOldAsc && OldDef->bIceCapable) ? 1 : 0);
+	R.Ascent.MassKg = AscentTotals.MassKg + (bAsc ? Def->MassKg : 0.f) - (bOldAsc ? OldMass : 0.f);
+	R.Ascent.CostM = AscentTotals.CostM + (bAsc ? Def->CostM : 0.f) - (bOldAsc ? OldCost : 0.f);
+	R.Ascent.ThrustN = AscentTotals.ThrustN + (bAsc ? Def->ThrustN : 0.f) - (bOldAsc ? OldThrust : 0.f);
+	R.Ascent.FuelMaxKg = AscentTotals.FuelMaxKg + (bAsc ? Def->FuelCapKg : 0.f) - (bOldAsc ? OldFuelCap : 0.f);
+	R.Ascent.BoosterCount = AscentTotals.BoosterCount + ((bAsc && Def->SocketType == EMCSocketType::Booster) ? 1 : 0)
+		- ((bOldAsc && OldDef->SocketType == EMCSocketType::Booster) ? 1 : 0);
 
 	const float ThrustNew = R.Ascent.ThrustN; // take-off thrust comes from the ascent group only
 	R.TWR = R.TotalMassKg > KINDA_SMALL_NUMBER ? ThrustNew / (R.TotalMassKg * MCConst::MoonG) : 0.f;
-	const bool bEngine = bHasEngine || R.Ascent.BoosterCount > 0 || (bAsc && Def->SocketType == EMCSocketType::Engine);
-	const bool bLidar = bHasLidar || Def->SocketType == EMCSocketType::Lidar;
+	const int32 EnginesNew = AscentTotals.EngineCount + ((bAsc && Def->SocketType == EMCSocketType::Engine) ? 1 : 0)
+		- ((bOldAsc && OldDef->SocketType == EMCSocketType::Engine) ? 1 : 0);
+	const bool bEngine = (bHasEngine && EnginesNew > 0) || R.Ascent.BoosterCount > 0 || (bAsc && Def->SocketType == EMCSocketType::Engine);
+	const bool bLidar = (bHasLidar && !(bOld && OldDef->SocketType == EMCSocketType::Lidar && Def->SocketType != EMCSocketType::Lidar))
+		|| Def->SocketType == EMCSocketType::Lidar;
 	R.TWRState = (!bEngine || R.TWR < MCConst::TWRRed) ? EMCCheckState::Red
 		: ((R.TWR >= MCConst::TWRGreen && bLidar) ? EMCCheckState::Green : EMCCheckState::Yellow);
 
@@ -182,10 +205,10 @@ FMCPreviewResult AMCConstructionManager::Preview(const UMCPartDef* Def) const
 	R.FuelState = (FuelMaxNew <= 0.f || R.FuelMargin < 0.f) ? EMCCheckState::Red
 		: (R.FuelMargin >= 0.1f ? EMCCheckState::Green : EMCCheckState::Yellow);
 
-	const float Gen = PowerGenW + FMath::Max(Def->PowerW, 0.f);
-	const float Use = PowerUseW + FMath::Max(-Def->PowerW, 0.f);
+	const float Gen = PowerGenW + FMath::Max(Def->PowerW, 0.f) - FMath::Max(OldPower, 0.f);
+	const float Use = PowerUseW + FMath::Max(-Def->PowerW, 0.f) - FMath::Max(-OldPower, 0.f);
 	R.PowerBalance = Gen - Use;
-	const float Storage = StorageWh + Def->StorageWh;
+	const float Storage = StorageWh + Def->StorageWh - OldStorage;
 	R.PowerState = (Gen <= 0.f || Gen < Use) ? EMCCheckState::Red
 		: ((Gen >= 1.1f * Use && Storage > 0.f) ? EMCCheckState::Green : EMCCheckState::Yellow);
 	return R;
@@ -262,6 +285,7 @@ void AMCConstructionManager::StartPhase()
 	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
 	const double Now = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
 	PhaseEndTime = Now + PhaseDurationSec;
+	if (SelectedLever < 0 && Rockets.Num() > 0) { SetRocketFields(0); } // default launcher so the preset rocket is drawn
 	Recalc();
 	Say(TEXT("Assembly phase started."));
 }
@@ -338,8 +362,10 @@ bool AMCConstructionManager::RemovePart(AMCPartSocket* Socket, EMCCrewRole InRol
 	if (!HasAuthority() || !bActive || bLaunched || !Socket || Socket->IsEmpty()) { return false; }
 	if (Socket->bBolted) { Say(TEXT("Unbolt with the wrench first.")); return false; }
 	if (!RoleAllowed(InRole, Socket->Installed->Department)) { Say(TEXT("That part belongs to another department.")); return false; }
+	const FString Name = Socket->Installed->DisplayName.ToString();
 	Socket->Remove();
 	bYellowWarned = false;
+	Say(FString::Printf(TEXT("Removed: %s"), *Name));
 	return true;
 }
 

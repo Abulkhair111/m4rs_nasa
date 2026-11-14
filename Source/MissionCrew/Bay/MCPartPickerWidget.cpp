@@ -212,7 +212,7 @@ void UMCPartPickerWidget::UpdatePreview()
 	}
 	if (!Manager) return;
 
-	const FMCPreviewResult R = Manager->Preview(D);
+	const FMCPreviewResult R = Manager->PreviewSwap(D, Socket ? Socket->Installed.Get() : nullptr); // swap: subtract the replaced part
 	if (TWRText)
 	{
 		TWRText->SetText(FText::FromString(FString::Printf(TEXT("Predicted T/W: %.2f  (needs >= %.1f, good >= %.1f)"), R.TWR, MCConst::TWRRed, MCConst::TWRGreen)));

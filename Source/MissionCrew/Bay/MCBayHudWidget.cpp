@@ -59,6 +59,19 @@ void UMCBayHudWidget::BuildFallbackLayout()
 		S->SetPosition(FVector2D::ZeroVector);
 		S->SetAutoSize(true);
 	}
+
+	HintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HintText"));
+	FSlateFontInfo HF = HintText->GetFont();
+	HF.Size = 13;
+	HintText->SetFont(HF);
+	HintText->SetColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f, 0.8f)));
+	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(HintText))
+	{
+		S->SetAnchors(FAnchors(0.f, 1.f));
+		S->SetAlignment(FVector2D(0.f, 1.f));
+		S->SetPosition(FVector2D(24.f, -20.f));
+		S->SetAutoSize(true);
+	}
 }
 
 void UMCBayHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -78,6 +91,7 @@ void UMCBayHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 void UMCBayHudWidget::Refresh()
 {
+	if (HintText) HintText->SetText(HintString);
 	if (PromptText)
 	{
 		FText Prompt;

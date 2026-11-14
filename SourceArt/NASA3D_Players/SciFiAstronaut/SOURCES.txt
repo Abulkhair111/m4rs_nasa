@@ -1,0 +1,5 @@
+Source: https://poly.pizza/m/3hC2i0CTuO  "Astronaut" by Quaternius (from the Quaternius Ultimate/Sci-Fi characters packs, https://quaternius.com)
+Direct file: https://static.poly.pizza/0076345b-bbea-42d5-931c-4a5ad2050b18.glb
+Licence: CC0 1.0 Public Domain (stated on the Poly Pizza page). Credit appreciated, not required.
+Rigged (62 bones), 10.6k tris, 24 animations (Idle, Idle_Neutral, Walk, Run, Run_Back/Left/Right, Interact, Wave, Roll, Death, ...). No Jump or Sit.
+Downloaded 2026-11-15 for Mission Crew (agent Q).

@@ -5,6 +5,9 @@
 #include "MCConstructionTypes.h"
 #include "MCPartSocket.generated.h"
 
+class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
+
 DECLARE_MULTICAST_DELEGATE(FMCSocketChanged);
 
 /**
@@ -67,7 +70,21 @@ public:
 	/** Blueprint hook: refresh ghost / alert marker / hide installed visuals. Called on server and clients. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Socket") void BP_OnStateChanged();
 
+	/** Flat disc marker made from the engine's Cylinder shape: blue = empty, red pulsing = alert, hidden when a part sits there fine. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Socket|Marker") TObjectPtr<UStaticMeshComponent> Marker;
+	/** Show the marker at all (turn off to hide every socket marker, e.g. when the stack draws its own). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket|Marker") bool bShowMarker = true;
+	/** Marker diameter, cm. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket|Marker") float MarkerDiameterCm = 40.f;
+
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	UFUNCTION() void OnRep_State();
 	void NotifyChanged();
+	void RefreshMarker();
+
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> MarkerMID;
+	bool bMarkerPulse = false;
 };

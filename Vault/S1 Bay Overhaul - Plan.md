@@ -101,3 +101,45 @@ Code: `MCRocketStack.*` (display mode, swap animation), `MCBayCharacter.*`, `MCC
 4. In the manager Blueprint (`BP_ConstructionManager` child) set `LauncherPresets` = the three assets. Optionally `Rockets` entries must exist (Name, payload, cost, reliability).
 5. Swappable parts: the ascent sockets and their part defs (Engine/Tank/Structure/Booster, see "Constructible rocket") are the swappable modules. Make sure candidate defs for each socket type exist in the `Catalog`, otherwise the picker is empty.
 6. Verify in PIE: look at the display from across the hall, the prompt shows the part, press E -> picker "swap the part", highlight a candidate -> ghost replaces the piece on BOTH rockets, Confirm -> old piece lifts out, new one lowers in. Look at a preset piece (core stage / side booster) and press E -> next launcher, both rockets change. Check a client in a listen-server session.
+
+## C++ interactables (Agent I1, 2026-11-15, game target compiled)
+Replaces the removed Blueprint buttons / levers / pumps / tool shelf. Source: `Source/MissionCrew/Interact/MCInteractable.h/.cpp`. All are plain level actors (non-replicated, state comes from the replicated manager). Each has an invisible `TraceBox` (blocks Visibility only, resize it), an empty `Mesh` slot (assign the team's model; nothing is generated), an engine `LabelText` (`Label` property) and `Department` (0 = any; ignored when the manager has `bFreeRoles`). Hover prompts show on the HUD; E calls the server `Use`, releasing E calls `Release` (hold items).
+
+| Class | Properties | Behaviour |
+|---|---|---|
+| `AMCReadyButton` | `Department` 1..4 | Toggles `DeptReady[Dept]` (server, `ToggleReady`). Prompt shows state. |
+| `AMCLaunchButton` | Department 2 | `TryLaunch`: needs 4 x READY; red aborts; yellow needs a second press (manager messages say why). Prompt shows ready count and red/yellow state. |
+| `AMCFuelPump` | `Rate` (kg/s, default 60; negative = drain variant), `MaxOperatorDistance` | Department 3. Hold E: server ticks `AddFuel(Rate*dt)`; stops on release, G, or walking away. |
+| `AMCRocketLever` | `LeverIndex` 0 Falcon 9, 1 Vulcan, 2 Falcon Heavy | Department 2. `SelectRocket`. Prompt shows payload/cost/reliability and [SELECTED]. |
+| `AMCToolStand` | none | One stand with both tools: each E hands over the next tool you may use (wrench, then cable reel, then back to empty). |
+| `AMCToolItem` | `ToolType` Wrench/Cable | Alternative: one actor per tool, E take / put down. Wrench needs dept 2, cable reel dept 1. |
+
+Pawn (`AMCBayCharacter`): E trace 350 cm checks interactables first (they win over sockets/stack), then rocket pieces, then the socket cone. `ServerInteract(Target)` -> `Use`; `ServerEndInteract()` (E released) -> `Release`. **G** puts the tool down (`ServerRelease`). With a tool held, E on an installed part calls `ApplyTool` (wrench toggles bolts, cable toggles wiring; role checks in the manager). Without a tool: E on an installed UNBOLTED part opens the swap picker; on a bolted part the server answers "Unbolt with the wrench first." R removes (unbolted only; manager says "Removed: ..."). Prompts for installed parts show [bolted]/[LOOSE], [wired]/[not wired] (tanks/boosters need no cable) and the tool hint. Held tool is shown under the prompt.
+
+Manager: new `bAutoStart` (default true): server `BeginPlay` calls `StartPhase()` when the map name contains `AssemblyBay`; `StartPhase` selects launcher 0 (Falcon 9) if none chosen; `RemovePart` says "Removed: ...". `BP_MC_BayGameMode` calling `StartPhase` again is harmless.
+
+Socket marker: `AMCPartSocket::Marker` = engine `/Engine/BasicShapes/Cylinder` squashed into a flat disc (`MarkerDiameterCm` 40, `bShowMarker`): blue when empty, red and pulsing when `bAlert` (loose / unwired / red check after preflight), hidden while a part sits there fine or is incoming. Local only (not on dedicated servers).
+
+### Editor setup (place these in `L_AssemblyBay`; coordinates reuse M2/N1 positions in [[Status]])
+1. Rebuild/restart the editor so the new classes exist (Place Actors -> search "MC").
+2. **Tools stand:** one `MCToolStand` at (-480, 0, 100) (where the old tools shelf stands, on the zone divider); set `Label` "TOOLS & WIRING"; resize `TraceBox` to about 100 x 60 x 60. (Or two `MCToolItem` with ToolType Wrench / Cable.)
+3. **READY buttons** (Department = number): Power `MCReadyButton` at (460, 1200, 110) Dept 1; Science at (-1160, 1200, 110) Dept 4; Propulsion at (-1020, -1200, 110) Dept 3; Construction (Dept 2) next to the tools stand / desk, e.g. (-480, 120, 110).
+4. **LAUNCH:** `MCLaunchButton` on the desk beside the tools stand, e.g. (-480, -120, 110).
+5. **Levers:** three `MCRocketLever` (LeverIndex 0, 1, 2; Labels Falcon 9 / Vulcan / Falcon Heavy) in a row on the desk, e.g. x -480, y 0/-40/40 (shift as needed).
+6. **Fuel pumps:** `MCFuelPump` at (-100, -1250, 110) (Rate 60, fill) and (80, -1250, 110) (Rate -60, drain; Label "FUEL DRAIN").
+7. Assign models to each `Mesh` component when the team has them (until then the white world label marks the spot). Z values are first guesses: put each trace box about 100-130 cm above the floor so it is reachable (E range 350 cm).
+8. Test: PIE, walk to the tools stand, E (wrench), aim at an installed part, E (bolts), G drops the tool. READY x4, hold E at the pump to fill, LAUNCH (twice if a yellow warning is shown).
+
+Not done: a preflight display actor (the wall board/graphs widget shows the checks; `Report` is replicated), no dedicated tool meshes in hand, no in-hand tool visual.
+
+## C++ displays and menu (Agent I2) - editor setup steps
+Classes are in the Place Actors search by name (compile first). All widgets build their own layout; no WBP needed.
+1. **Wall boards** (`MCWallBoard`, 600 x 340 cm, face the actor +X, so yaw 0 = toward +X):
+   - Checks board A: location (-1315, 900, 180), yaw 0 (west wall).
+   - Checks board B: location (1315, -850, 180), yaw 180 (east wall, faces -X).
+   - Graphs board: `MCWallBoard` with `Mode = Graphs`, location (-1310, -900, 205), yaw 0. (Old graph board was scale 1.2, 720x405 cm; set `WorldWidthCm` 720 for the same size.)
+   - Text mirrored on a board? Add 180 to `FaceYawDegrees`. Too dim or small: change `WorldWidthCm`.
+2. **Mass scale** (`MCMassScale`) and **power strip** (`MCPowerStrip`): small panels, 200 x 112 cm. Put them near the stack/pad at eye height, e.g. mass scale (700, -900, 140), power strip (1050, -900, 140), yaw so +X points to the player; reuse the old `BP_MassScale` / `BP_PowerStrip` positions from the Status.md Agent A2 notes if known.
+3. **Menu**: nothing to place. Agent I1 must hook `UMCBayMenuWidget` into `AMCBayCharacter` (Esc / P), see `Bay/UI/MCBayMenuWidget.h`. In PIE Esc stops the session, use P there.
+4. Optional: reparent WBP children to the widget classes (names in each header) and assign them to `ChecksWidgetClass` / `GraphsWidgetClass` / `WidgetClassOverride`.
+5. Verify in PIE: boards update when a part is placed (checks go green/yellow/red), swap picker shows a sensible predicted T/W.
