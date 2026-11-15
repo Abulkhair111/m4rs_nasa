@@ -31,6 +31,14 @@ AMCOrbitView::AMCOrbitView()
 	FlareLight->SetIntensity(0.f);
 	FlareLight->SetLightColor(FLinearColor(1.f, 0.7f, 0.4f));
 	FlareLight->SetCastShadows(false);
+	// Space has no ambient light: a soft fill light travels with the lander so its shaded side stays readable.
+	UPointLightComponent* Fill = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLight"));
+	Fill->SetupAttachment(ShipRoot);
+	Fill->SetRelativeLocation(FVector(-700.f, 350.f, 450.f));
+	Fill->SetIntensity(70000.f);
+	Fill->SetAttenuationRadius(3500.f);
+	Fill->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
+	Fill->SetCastShadows(false);
 	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
 	ChaseCamera->SetupAttachment(Root);
 	MoonMeshAsset = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere")));
