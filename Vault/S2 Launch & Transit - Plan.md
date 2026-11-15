@@ -26,6 +26,26 @@ After the crew builds the spacecraft in S1 and presses LAUNCH, the same four pla
 - Every player has the **astronaut body** (Agent Q) at their station; you can see teammates working.
 - **Launch moment:** the S1 rocket (the stack the players built) lifts off on the pad outside the window: countdown 10 s, ascent 20 s, then the camera/holo switches to the coast to the Moon. Rocket model = the same `AMCRocketStack`, so what you built is what flies.
 
+## 2b. 3D flight view (user decision 2026-11-15: "I want this")
+The spacecraft is visible and moves as the Pilot burns. Not a console-only game.
+- **Flight actor `AMCFlightView`:** deep-space scene (Space Spheremaps sky, Earth and Moon spheres with NASA textures, the planned corridor drawn as a line/ring series), the spacecraft (the S1 lander + ascent stage; reuse the `AMCRocketStack` visuals and the detailed lander mesh), a trailing flown path, the predicted path to the Moon and the target corridor at the Moon.
+- **Motion:** the manager's progress drives the ship along an Earth to Moon arc (compressed distances, readable). The lateral miss (`ErrX/ErrY`) is the ship's offset from the ideal line, so a bad course visibly drifts off the corridor. The Pilot's LEFT/RIGHT/UP/DOWN pulses push the ship sideways with an engine flare (a small engine-asset emitter or light flash, no custom geometry) and RCS puffs, fuel gauge drops. A TCM window shows as a glowing ring on the path.
+- **Cameras:** a chase camera behind the ship. The Pilot, when seated, sees the chase camera with the scope/burn panel overlay. The other three roles see their own station and a big **viewscreen** on the desk showing the same flight (a `SceneCapture` render target on the screen material); key V toggles station view / flight view for everyone.
+- **Sensor fault:** while the sensor is faulty the Pilot's displayed scope and a ghost marker show the OLD course, but the real ship drifts; after the Systems Operator switches NAV SENSOR to B the ghost vanishes and the extra TCM-FAULT window opens (everyone sees the ship leave the corridor, which is why they must talk).
+- **Phases in 3D:** countdown on the pad (the S1 rocket stack on the pad outside the window), lift-off and ascent (rocket climbs, the camera follows), coast (stage separation to lander + ascent stage), arrival (ship at the Moon, results board).
+
+## 2c. Roles (four players, four jobs)
+S1 roles (Power / Construction / Propulsion / Science) become S2 roles by CrewRole number (the design document lets roles change per submission; for now the player keeps the same slot number):
+
+| Slot | S1 role | S2 role | Station colour | Main job in S2 | Depends on / feeds |
+|---|---|---|---|---|---|
+| 1 | Power Engineer | **Systems Operator** | cyan | Panel switches, alarms, the sensor swap, both power rails (instrument, mechanism) | Feeds Equipment and Science (rails) and the Pilot (true course after sensor swap) |
+| 2 | Construction Engineer | **Equipment Technician** | orange | Tests rover, drill, landing legs in the right 3-step order (needs mechanism rail) | Needs Systems' rail; result goes to the score and to S3/S4 readiness |
+| 3 | Propulsion Engineer | **Pilot** | green | Flies the ship: burns in timed windows, fuel budget, keeps the corridor, 3D chase view | Needs the true course (Systems) and the fuel built in S1 |
+| 4 | Science Specialist | **Science Operator** | yellow | Calibrates the instruments built in S1 (offset to 50 +-3, LOCK; needs instrument rail) | Needs Systems' rail; calibrated instruments go to S4 |
+
+Rules: nobody can finish the stage alone (the rails belong to Systems, the true course belongs to Systems, the fuel is the Pilot's). Roles are fixed per slot in the lobby; each player only gets their own panel, others' stations are locked (test mode lets one player try any).
+
 ## 3. Realisation (C++ port, data-driven)
 Decision (user, 2026-11-14): logic in C++, Blueprints only for assets and layout.
 

@@ -1,0 +1,4 @@
+Model: VAB. URL: https://github.com/nasa/NASA-3D-Resources (3D Models folder). Author: NASA.
+Licence: NASA 3D Resources, public domain per NASA media guidelines; do not imply endorsement or use the insignia as a logo.
+Downloaded 2026-11-15 raw.githubusercontent.com. FBX in fbx/ via Tools/WebModels/glb_to_fbx.py (Blender 5.2), origin bottom-centre.
+Also downloaded only (not converted): CrewLockBag, RASSOR (2M tris), VikingLander, Crawler, Apollo 11/14 landing-site STL (terrain heightfield, in sibling NASA3D_* folders).

@@ -6,7 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Transit/MCStationCharacter.h"
+#include "Bay/MCBayCharacter.h"
 
 UMCBodyAnimComponent::UMCBodyAnimComponent()
 {
@@ -32,9 +32,11 @@ void UMCBodyAnimComponent::FindBody()
 	AActor* Owner = GetOwner();
 	if (!Owner) return;
 
+	// An empty BodyRef resolves to the owner's ROOT component (the capsule). Treat that as "unset": driving the
+	// procedural bob/sway on the capsule fights character movement and snaps the pawn back (rubber-banding).
 	if (USceneComponent* Ref = Cast<USceneComponent>(BodyRef.GetComponent(Owner)))
 	{
-		BodyComp = Ref;
+		if (Ref != Owner->GetRootComponent()) BodyComp = Ref;
 	}
 	TArray<USkeletalMeshComponent*> Skels;
 	Owner->GetComponents<USkeletalMeshComponent>(Skels);
@@ -103,7 +105,7 @@ bool UMCBodyAnimComponent::ShouldLoop(EMCBodyAnimState S) const
 
 EMCBodyAnimState UMCBodyAnimComponent::ComputeState(float GroundSpeed, bool bFalling, float VelZ) const
 {
-	if (const AMCStationCharacter* SC = Cast<AMCStationCharacter>(GetOwner()))
+	if (const AMCBayCharacter* SC = Cast<AMCBayCharacter>(GetOwner()))
 	{
 		if (SC->SeatedStation) return bWorking_ ? EMCBodyAnimState::Work : EMCBodyAnimState::Sit;
 	}

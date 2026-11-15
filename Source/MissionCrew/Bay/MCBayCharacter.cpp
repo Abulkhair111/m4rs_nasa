@@ -6,9 +6,15 @@
 #include "Bay/MCPartPickerWidget.h"
 #include "Bay/MCRocketStack.h"
 #include "Bay/UI/MCBayMenuWidget.h"
+#include "Transit/MCStation.h"
+#include "Transit/MCStationLibrary.h"
+#include "Transit/Flight/MCFlightView.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/BoxComponent.h"
 #include "Construction/MCConstructionManager.h"
 #include "Construction/MCPartSocket.h"
 #include "Interact/MCInteractable.h"
+#include "Shelf/MCShelfPart.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -46,6 +52,7 @@ void AMCBayCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(AMCBayCharacter, HeldTool, COND_OwnerOnly);
+	DOREPLIFETIME(AMCBayCharacter, SeatedStation);
 }
 
 // ------------------------------------------------------------------ input
@@ -129,6 +136,10 @@ void AMCBayCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 		EIC->BindAction(RemoveAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnRemovePressed);
 		EIC->BindAction(CursorAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnCursorPressed);
 		EIC->BindAction(MenuAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnMenuPressed);
+		BuildStationInput();
+		EIC->BindAction(StationUseAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnStationInteract);
+		EIC->BindAction(StationEscAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnStationEscape);
+		EIC->BindAction(StationViewAction, ETriggerEvent::Started, this, &AMCBayCharacter::OnStationViewToggle);
 	}
 }
 
@@ -136,13 +147,16 @@ void AMCBayCharacter::PawnClientRestart()
 {
 	Super::PawnClientRestart();
 	AddMappingContext();
+	AddStationMapping();
 	EnsureHud();
+	if (SeatedStation) ApplySeatState(nullptr);
 }
 
 void AMCBayCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	AddMappingContext(); // listen server / standalone host
+	AddStationMapping();
 	EnsureHud();
 	if (AMCConstructionManager* M = GetManager())
 	{
@@ -154,11 +168,21 @@ void AMCBayCharacter::OnRep_Controller()
 {
 	Super::OnRep_Controller();
 	AddMappingContext(); // client: controller arrives after the pawn
+	AddStationMapping();
 	EnsureHud();
+	if (SeatedStation) ApplySeatState(nullptr);
+}
+
+void AMCBayCharacter::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (HasAuthority() && SeatedStation && SeatedStation->Occupant == this) SeatedStation->Occupant = nullptr;
+	ShowTransitHud(false);
+	Super::EndPlay(Reason);
 }
 
 void AMCBayCharacter::UnPossessed()
 {
+	ShowTransitHud(false);
 	if (Picker) Picker->RemoveFromParent();
 	Picker = nullptr;
 	if (Menu) { Menu->Close(); Menu = nullptr; }
@@ -199,11 +223,13 @@ void AMCBayCharacter::OnCursorPressed()
 
 void AMCBayCharacter::OnMenuPressed()
 {
+	if (SeatedStation) { ServerStandUp(); return; } // Esc / P stand up first; the pause menu is for standing players
 	if (Picker && Picker->IsInViewport())
 	{
 		Picker->Cancel(); // Esc / P closes the picker first
 		return;
 	}
+	if (SelectedPart) { ClearSelection(true); return; } // Esc / P first clears a shelf selection
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC || !PC->IsLocalController()) return;
 	if (!Menu)
@@ -376,6 +402,37 @@ void AMCBayCharacter::Tick(float DeltaSeconds)
 	if (IsLocallyControlled())
 	{
 		UpdateAim();
+		if (SeatedStation)
+		{
+			AimPrompt = FText::FromString(TEXT("[E] / [Esc] Stand up"));
+			if (!bCursorMode) SetCursorMode(true); // Tab must not leave the console
+		}
+		else if (!AimedSocket && !AimedActor && !bAimedLauncherPart)
+		{
+			UpdateStationAim(); // stations only when no interactable / socket / launcher part is aimed
+		}
+		else
+		{
+			AimedStation = nullptr;
+		}
+		if (SelectedPart && !SeatedStation)
+		{
+			const AMCConstructionManager* M = GetManager();
+			if (AimedSocket && !AimedSocket->Installed && !AimedSocket->bReserved)
+			{
+				const FString Why = AMCShelfPart::WhyNotPlaceable(SelectedPart, AimedSocket, M, GetCrewRole());
+				AimPrompt = FText::FromString(Why.IsEmpty()
+					? FString::Printf(TEXT("[E] Install %s here"), *SelectedPart->DisplayName.ToString())
+					: FString::Printf(TEXT("Cannot install %s here:\n%s"), *SelectedPart->DisplayName.ToString(), *Why));
+			}
+			const FString Sel = FString::Printf(TEXT("Selected: %s: aim at a free %s socket and press E   ([G] cancel)"),
+				*SelectedPart->DisplayName.ToString(), MCBayUI::SocketTypeName(SelectedPart->SocketType));
+			AimPrompt = AimPrompt.IsEmpty() ? FText::FromString(Sel) : FText::FromString(AimPrompt.ToString() + TEXT("\n") + Sel);
+		}
+		if (!NoticeText.IsEmpty() && GetWorld()->GetTimeSeconds() < NoticeUntil)
+		{
+			AimPrompt = AimPrompt.IsEmpty() ? FText::FromString(NoticeText) : FText::FromString(AimPrompt.ToString() + TEXT("\n") + NoticeText);
+		}
 		if (HeldTool != EMCToolType::None)
 		{
 			const FString Held = FString::Printf(TEXT("Holding: %s   [G] put down"), HeldTool == EMCToolType::Wrench ? TEXT("wrench (bolts)") : TEXT("cable reel (wires)"));
@@ -387,6 +444,11 @@ void AMCBayCharacter::Tick(float DeltaSeconds)
 void AMCBayCharacter::OnInteractPressed()
 {
 	if (bCursorMode) return;
+	if (AMCShelfPart* SP = Cast<AMCShelfPart>(AimedInteractable))
+	{
+		OnShelfPartPressed(SP);
+		return;
+	}
 	if (bAimedLauncherPart)
 	{
 		const AMCConstructionManager* M = GetManager();
@@ -396,6 +458,7 @@ void AMCBayCharacter::OnInteractPressed()
 	if (AimedSocket)
 	{
 		if (AimedSocket->bReserved) return;
+		if (SelectedPart && HeldTool == EMCToolType::None) { PlaceSelected(AimedSocket); return; }
 		if (!AimedSocket->Installed) { OpenPicker(AimedSocket); return; }
 		if (HeldTool != EMCToolType::None) { ServerInteract(AimedSocket); return; }
 		// Installed part, no tool: unbolted = pick another one (swap); bolted = the server says to unbolt first.
@@ -417,7 +480,59 @@ void AMCBayCharacter::OnInteractReleased()
 void AMCBayCharacter::OnDropPressed()
 {
 	if (bCursorMode) return;
+	if (SelectedPart) { ClearSelection(true); return; } // G first clears a shelf selection
 	ServerRelease();
+}
+
+// ------------------------------------------------------------------ shelf selection (local) and placement
+
+void AMCBayCharacter::SelectPart(UMCPartDef* Def, AMCShelfPart* From)
+{
+	SelectedPart = Def;
+	SelectedFrom = From;
+}
+
+void AMCBayCharacter::ClearSelection(bool bShowNote)
+{
+	const bool bHad = SelectedPart != nullptr;
+	SelectedPart = nullptr;
+	SelectedFrom = nullptr;
+	if (bShowNote && bHad) ShowNotice(TEXT("Selection cleared"), 2.f);
+}
+
+void AMCBayCharacter::ShowNotice(const FString& Text, float Seconds)
+{
+	NoticeText = Text;
+	NoticeUntil = GetWorld() ? GetWorld()->GetTimeSeconds() + Seconds : 0.0;
+}
+
+void AMCBayCharacter::OnShelfPartPressed(AMCShelfPart* Part)
+{
+	if (!Part || !Part->Def) return;
+	if (!Part->IsAllowedFor(this))
+	{
+		ShowNotice(FString::Printf(TEXT("Only the %s can take the %s."), *AMCShelfPart::DepartmentTitle(Part->Def->Department), *Part->Def->DisplayName.ToString()), 4.f);
+		return;
+	}
+	if (Part->Def->IsTool()) return;
+	SelectPart(Part->Def, Part);
+	Part->PlayPickup();
+	NoticeText.Empty();
+}
+
+void AMCBayCharacter::PlaceSelected(AMCPartSocket* Socket)
+{
+	if (!Socket || !SelectedPart) return;
+	const FString Why = AMCShelfPart::WhyNotPlaceable(SelectedPart, Socket, GetManager(), GetCrewRole());
+	if (!Why.IsEmpty())
+	{
+		ShowNotice(Why, 4.f);
+		return;
+	}
+	const AMCShelfPart* From = SelectedFrom.Get();
+	ServerPlacePartFrom(Socket, SelectedPart, From ? From->GetPickupLocation() : FVector::ZeroVector, From != nullptr);
+	if (SelectedFrom.IsValid()) SelectedFrom->PlayPickup();
+	ClearSelection(false);
 }
 
 void AMCBayCharacter::OnRemovePressed()
@@ -453,11 +568,18 @@ void AMCBayCharacter::ServerPlacePart_Implementation(AMCPartSocket* Socket, UMCP
 	M->PlacePart(Socket, Def, (EMCCrewRole)GetCrewRole());
 }
 
+void AMCBayCharacter::ServerPlacePartFrom_Implementation(AMCPartSocket* Socket, UMCPartDef* Def, FVector From, bool bHasFrom)
+{
+	if (bHasFrom) AMCPartMover::SetNextStart(From);
+	ServerPlacePart_Implementation(Socket, Def);
+	AMCPartMover::ClearNextStart();
+}
+
 void AMCBayCharacter::ServerInteract_Implementation(AActor* Target)
 {
 	if (!Target) return;
 	// Reach check (generous for latency).
-	if (FVector::Dist(GetPawnViewLocation(), Target->GetActorLocation()) > SocketReach + InteractRange + 300.f) return;
+	if (FVector::Dist(GetPawnViewLocation(), Target->GetActorLocation()) > FMath::Max(SocketReach + InteractRange + 300.f, StackAimRange + 300.f)) return;
 
 	if (AMCPartSocket* S = Cast<AMCPartSocket>(Target))
 	{
@@ -528,4 +650,249 @@ void AMCBayCharacter::ServerSelectLauncher_Implementation(int32 LeverIndex)
 void AMCBayCharacter::ServerSetHeldTool_Implementation(EMCToolType Tool)
 {
 	HeldTool = Tool;
+}
+
+// ================================================================== stations (moved from AMCStationCharacter)
+
+// ------------------------------------------------------------------ input (own context, E and Esc)
+
+void AMCBayCharacter::BuildStationInput()
+{
+	if (StationMapping) return;
+	StationMapping = NewObject<UInputMappingContext>(this, TEXT("IMC_StationRuntime"));
+	StationUseAction = NewObject<UInputAction>(this, TEXT("IA_StationUse"));
+	StationUseAction->ValueType = EInputActionValueType::Boolean;
+	StationEscAction = NewObject<UInputAction>(this, TEXT("IA_StationEsc"));
+	StationEscAction->ValueType = EInputActionValueType::Boolean;
+	StationMapping->MapKey(StationUseAction, EKeys::E);
+	StationMapping->MapKey(StationEscAction, EKeys::Escape);
+	StationViewAction = NewObject<UInputAction>(this, TEXT("IA_StationView"));
+	StationViewAction->ValueType = EInputActionValueType::Boolean;
+	StationMapping->MapKey(StationViewAction, EKeys::V);
+	// The station context sits above the bay context (priority 1). By default an action consumes its key, which
+	// would swallow E (bay interact) and Esc (pause menu) before they reach the bay actions. Let them fall through.
+	StationUseAction->bConsumeInput = false;
+	StationEscAction->bConsumeInput = false;
+	StationViewAction->bConsumeInput = false;
+}
+
+void AMCBayCharacter::AddStationMapping()
+{
+	BuildStationInput();
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !PC->IsLocalController()) return;
+	if (ULocalPlayer* LP = PC->GetLocalPlayer())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		{
+			Sub->RemoveMappingContext(StationMapping);
+			FModifyContextOptions Opt;
+			Opt.bIgnoreAllPressedKeysUntilRelease = false;
+			Sub->AddMappingContext(StationMapping, 1, Opt);
+		}
+	}
+}
+// ------------------------------------------------------------------ aim
+
+void AMCBayCharacter::UpdateStationAim()
+{
+	AimedStation = nullptr;
+	bStationRefused = false;
+	if (SeatedStation || bCursorMode) return;
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	FVector Eye; FRotator Rot;
+	PC->GetPlayerViewPoint(Eye, Rot);
+	const FVector Dir = Rot.Vector();
+
+	float BestDot = StationAimCos;
+	for (TActorIterator<AMCStation> It(GetWorld()); It; ++It)
+	{
+		const FBox Box = It->Trigger ? It->Trigger->Bounds.GetBox() : FBox(It->GetActorLocation() - FVector(50.f), It->GetActorLocation() + FVector(50.f));
+		const float Dist = FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(Eye));
+		if (Dist > It->UseRange) continue;
+		const FVector To = Box.GetCenter() - Eye;
+		const float Dot = To.IsNearlyZero() ? 1.f : FVector::DotProduct(To.GetSafeNormal(), Dir);
+		if (Dist < 1.f || Dot > BestDot) { BestDot = Dot; AimedStation = *It; }
+	}
+
+	if (AimedStation)
+	{
+		const bool bFree = UMCStationLibrary::AreRolesFree(this);
+		const int32 MyRole = GetCrewRole();
+		const bool bOk = MyRole == 0 || AimedStation->CanBeUsedBy(MyRole, bFree);
+		const FString Name = AimedStation->StationName.IsEmpty() ? AMCStation::RoleName(AimedStation->CrewRole) : AimedStation->StationName.ToString();
+		if (!bOk)
+		{
+			bStationRefused = true;
+			AimPrompt = FText::FromString(FString::Printf(TEXT("%s - station of another role (you are %s)"), *Name, *AMCStation::RoleName(MyRole)));
+		}
+		else if (!AimedStation->IsFree())
+		{
+			AimPrompt = FText::FromString(FString::Printf(TEXT("%s - occupied"), *Name));
+		}
+		else
+		{
+			AimPrompt = FText::FromString(FString::Printf(TEXT("[E] Sit at %s"), *Name));
+		}
+	}
+}
+void AMCBayCharacter::OnStationInteract()
+{
+	if (SeatedStation) { ServerStandUp(); return; }
+	if (AimedStation && !bStationRefused && AimedStation->IsFree() && !bCursorMode) ServerSitAtStation(AimedStation);
+}
+
+void AMCBayCharacter::OnStationEscape()
+{
+	if (SeatedStation) ServerStandUp();
+}
+
+void AMCBayCharacter::OnStationViewToggle()
+{
+	ToggleFlightView();
+}
+
+void AMCBayCharacter::ToggleFlightView()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!SeatedStation || !PC || !PC->IsLocalController()) return;
+	AMCFlightView* FV = AMCFlightView::Find(this);
+	if (!FV) return;
+	bFlightViewActive = !bFlightViewActive;
+	AActor* Target = bFlightViewActive ? static_cast<AActor*>(FV) : static_cast<AActor*>(SeatedStation);
+	PC->SetViewTargetWithBlend(Target, ViewBlendTime);
+}
+
+// ------------------------------------------------------------------ seat logic (server)
+
+bool AMCBayCharacter::SeatAt(AMCStation* Station, bool bIgnoreRole)
+{
+	if (!HasAuthority() || !Station) return false;
+	if (SeatedStation == Station) return true;
+	if (Station->Occupant && Station->Occupant != this) return false;
+	if (!bIgnoreRole)
+	{
+		const int32 MyRole = GetCrewRole();
+		if (MyRole != 0 && !Station->CanBeUsedBy(MyRole, UMCStationLibrary::AreRolesFree(this))) return false;
+	}
+	if (SeatedStation) StandUp();
+
+	const FTransform Seat = Station->SeatPoint ? Station->SeatPoint->GetComponentTransform() : Station->GetActorTransform();
+	FVector Loc = Seat.GetLocation();
+	Loc.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FRotator Face(0.f, Station->GetActorRotation().Yaw, 0.f);
+	TeleportTo(Loc, Face, false, true);
+	if (AController* C = GetController()) C->SetControlRotation(Face);
+	if (APlayerController* PC = Cast<APlayerController>(GetController())) PC->ClientSetRotation(Face);
+
+	AMCStation* Prev = SeatedStation;
+	Station->Occupant = this;
+	SeatedStation = Station;
+	ApplySeatState(Prev);
+	Station->ForceNetUpdate();
+	ForceNetUpdate();
+	return true;
+}
+
+bool AMCBayCharacter::SeatAtOwnStation()
+{
+	if (!HasAuthority()) return false;
+	AMCStation* S = AMCStation::FindForRole(this, GetCrewRole());
+	if (!S && GetCrewRole() <= 0)
+	{
+		// No lobby role (direct test play): take the first free station so a solo tester is seated and can use any console.
+		for (TActorIterator<AMCStation> It(GetWorld()); It; ++It) { if (It->IsFree()) { S = *It; break; } }
+	}
+	return S ? SeatAt(S, true) : false;
+}
+
+void AMCBayCharacter::StandUp()
+{
+	if (!HasAuthority() || !SeatedStation) return;
+	AMCStation* Prev = SeatedStation;
+	if (Prev->Occupant == this) Prev->Occupant = nullptr;
+	SeatedStation = nullptr;
+	ApplySeatState(Prev);
+	Prev->ForceNetUpdate();
+	ForceNetUpdate();
+}
+
+void AMCBayCharacter::ServerSitAtStation_Implementation(AMCStation* Station)
+{
+	if (!Station) return;
+	// Reach check (generous for latency).
+	if (FVector::Dist(GetActorLocation(), Station->GetActorLocation()) > Station->UseRange + 600.f) return;
+	SeatAt(Station, false);
+}
+
+void AMCBayCharacter::ServerStandUp_Implementation()
+{
+	StandUp();
+}
+
+void AMCBayCharacter::ServerTransitAction_Implementation(int32 Code)
+{
+	if (bRequireSeat && !SeatedStation && !UMCStationLibrary::AreRolesFree(this)) return;
+	AActor* M = UMCStationLibrary::FindTransitManager(this);
+	if (!M) return;
+	UMCStationLibrary::CallHandleAction(M, Code, GetCrewRole());
+}
+// ------------------------------------------------------------------ seat state (server + clients)
+
+void AMCBayCharacter::OnRep_Seat(AMCStation* Previous)
+{
+	ApplySeatState(Previous);
+}
+
+void AMCBayCharacter::ShowTransitHud(bool bShow)
+{
+	if (!bShow)
+	{
+		if (TransitHud) TransitHud->RemoveFromParent();
+		TransitHud = nullptr;
+		return;
+	}
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (TransitHud || !PC || !PC->IsLocalController()) return;
+	TSubclassOf<UUserWidget> Cls = TransitHudClass;
+	if (!Cls) Cls = FindObject<UClass>(nullptr, TEXT("/Script/MissionCrew.MCTransitHudWidget"));
+	if (!Cls) return;
+	TransitHud = CreateWidget<UUserWidget>(PC, Cls);
+	if (TransitHud) TransitHud->AddToViewport(20);
+}
+
+void AMCBayCharacter::ApplySeatState(AMCStation* /*Previous*/)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	const bool bSeated = SeatedStation != nullptr;
+	if (Move)
+	{
+		if (bSeated) { Move->StopMovementImmediately(); Move->DisableMovement(); }
+		else Move->SetMovementMode(MOVE_Walking);
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !PC->IsLocalController()) return;
+
+	if (bSeated)
+	{
+		// Every seated player starts in the 3D flight chase view (rocket + controls overlay, no view of the crew) when the
+		// level has an AMCFlightView; V toggles back to the station camera.
+		AMCFlightView* FV = AMCFlightView::Find(this);
+		bFlightViewActive = FV != nullptr;
+		PC->SetViewTargetWithBlend(bFlightViewActive ? static_cast<AActor*>(FV) : static_cast<AActor*>(SeatedStation), ViewBlendTime);
+		SetCursorMode(true);
+		if (Hud) Hud->SetVisibility(ESlateVisibility::Collapsed);
+		ShowTransitHud(true);
+	}
+	else
+	{
+		ShowTransitHud(false);
+		bFlightViewActive = false;
+		PC->SetViewTargetWithBlend(this, ViewBlendTime * 0.6f);
+		SetCursorMode(false);
+		if (Hud) Hud->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
 }

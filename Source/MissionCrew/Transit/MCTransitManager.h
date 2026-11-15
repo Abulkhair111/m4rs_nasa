@@ -36,8 +36,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bAutoStart = true;
 	/** Start immediately in BeginPlay with the test loadout (maps named L_Transit also do this). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bStartOnBeginPlay = false;
+	/** After the arrival report, ServerTravel here (S3). Empty = stay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config|Flow") FString NextMapName = TEXT("/Game/MissionCrew/Maps/L_Orbit");
+	/** Seconds the arrival report stays up before the travel. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config|Flow") float TravelDelaySec = 12.f;
 	/** Run the scripted bot (RunDebugTest) as soon as the transit starts; implies bFreeRoles. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bDebugAutoTest = false;
+
+	/** SERVER: after BeginTransit, re-apply the recorded crew roles (UMCMissionSubsystem) and seat every player at its own station. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bAutoSeat = true;
+	/** Seconds after BeginTransit before the first seating attempt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") float SeatDelaySec = 2.f;
+	/** Keep retrying once per second for late joiners (clients reconnect after the travel) for this long. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") float SeatRetrySec = 30.f;
 
 	// ---------------- Replicated state (plain values, for the UI) ----------------
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "State") EMCTransitStage Stage = EMCTransitStage::GoPoll;
@@ -106,6 +117,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Transit") float GetStageTimeLeft() const;
 	/** True error is hidden from clients; this tells the HUD that the display is currently stale (only the server knows; replicated). */
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Pilot") bool bDisplayStale = false;
+	/** Flight view (agent F3): the TRUE predicted miss in km (server ErrX/ErrY), replicated so the 3D ship can drift off the corridor
+	 *  even while the Pilot's display (DispX/DispY) is stale. Visual only: no client logic reads it. */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Flight") float ShipErrX = 0.f;
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Flight") float ShipErrY = 0.f;
+	/** Flight view: counts accepted Pilot pulses; LastPulseDir is the EMCPilotAction of the last one (flare / RCS puff). */
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Flight") int32 PulseSeq = 0;
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Flight") int32 LastPulseDir = 0;
 	/** Reads the CrewRole property of a controller's PlayerState by reflection (0 if absent). */
 	UFUNCTION(BlueprintCallable, Category = "Transit") static int32 GetCrewRoleOfController(const AController* Controller);
 
@@ -117,6 +135,10 @@ protected:
 	void FindConstructionManager();
 	void LoadLoadout(bool bUseDefault);
 	void InitData();
+	void AutoSeatTick();
+	FTimerHandle SeatTimer;
+	float SeatElapsed = 0.f;
+	TSet<TWeakObjectPtr<APawn>> AutoSeated;
 	void SetStage(EMCTransitStage NewStage, float DurationSec);
 	void Say(const FString& Text);
 	void Score(int32 Role, bool bGood);

@@ -14,6 +14,8 @@ This is the project's knowledge base. **Read this first.** Then open only the no
 | S2 Launch & Transit (state, design, next steps) | [[S2 Launch & Transit - Handoff]] |
 | Bay overhaul (vertical hall, choose-to-place, graphs/TWR, parallel agent split) | [[S1 Bay Overhaul - Plan]] |
 | S2 Launch & Transit plan (idea, realisation, tasks; awaiting user go) | [[S2 Launch & Transit - Plan]] |
+| S3 Orbit & Landing plan (idea, 3D views, C++ realisation, tasks, decisions; awaiting user go) | [[S3 Orbit & Landing - Plan]] |
+| Packaging a Windows build + multiplayer test on a second PC (`Tools/Package/package.ps1`, Cyrillic-name risks, firewall, checklists) | [[Packaging and Multiplayer Test]] |
 | 3D construction (assembly bay) design | Current rules: Ice Return S1 in `../CONSTRUCTION_PHASE_ICE_RETURN.md` §3. Original bay design: `construction_phase.md` (actually a .docx, so open it in Word). Implementation: [[Architecture]] → Construction phase |
 
 Full plan with the 48h timeline: `../ROADMAP.md` (Russian). The original design PDFs are summarised in [[Game Design]].

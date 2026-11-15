@@ -55,6 +55,9 @@ public:
 
 	/** Idempotent. Hooks OnPlacementApproved so approved placements spawn movers. Call on the server. */
 	static void BindToManager(AMCConstructionManager* Manager);
+	/** Server: the next light-part Launch (same frame, from PlacePart) starts at this world location (the shelf part the player used). */
+	static void SetNextStart(const FVector& WorldLoc);
+	static void ClearNextStart();
 	static AMCPartMover* Launch(AMCPartSocket* Socket, UMCPartDef* Def, EMCCrewRole InRole, bool bHeavy);
 
 	UPROPERTY(Replicated, BlueprintReadOnly) TObjectPtr<UMCPartDef> Def;

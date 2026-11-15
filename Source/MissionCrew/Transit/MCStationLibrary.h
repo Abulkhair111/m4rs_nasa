@@ -5,7 +5,7 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MCStationLibrary.generated.h"
 
-class AMCStationCharacter;
+class AMCBayCharacter;
 class APlayerState;
 class AController;
 
@@ -19,8 +19,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Transit", meta = (WorldContext = "WorldContext")) static AActor* FindTransitManager(UObject* WorldContext);
 	/** CrewRole (1..4, 0 = unknown) of the local player. */
 	UFUNCTION(BlueprintPure, Category = "Transit", meta = (WorldContext = "WorldContext")) static int32 GetLocalRole(UObject* WorldContext);
-	/** The local player's station pawn (null if the pawn is not an AMCStationCharacter). */
-	UFUNCTION(BlueprintPure, Category = "Transit", meta = (WorldContext = "WorldContext")) static AMCStationCharacter* GetLocalStationPawn(UObject* WorldContext);
+	/** The local player's station pawn (null if the pawn is not an AMCBayCharacter). */
+	UFUNCTION(BlueprintPure, Category = "Transit", meta = (WorldContext = "WorldContext")) static AMCBayCharacter* GetLocalStationPawn(UObject* WorldContext);
 	/** Manager bFreeRoles (read by reflection). False if there is no manager. */
 	UFUNCTION(BlueprintPure, Category = "Transit", meta = (WorldContext = "WorldContext")) static bool AreRolesFree(UObject* WorldContext);
 	/** Button entry point: calls ServerTransitAction(Code) on the local pawn. Returns false if there is no station pawn. */

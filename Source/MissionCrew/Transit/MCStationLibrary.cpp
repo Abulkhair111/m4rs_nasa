@@ -1,5 +1,5 @@
 #include "Transit/MCStationLibrary.h"
-#include "Transit/MCStationCharacter.h"
+#include "Bay/MCBayCharacter.h"
 #include "Transit/MCStation.h"
 #include "Transit/MCTransitManager.h"
 
@@ -36,11 +36,11 @@ int32 UMCStationLibrary::GetLocalRole(UObject* WorldContext)
 	return 0;
 }
 
-AMCStationCharacter* UMCStationLibrary::GetLocalStationPawn(UObject* WorldContext)
+AMCBayCharacter* UMCStationLibrary::GetLocalStationPawn(UObject* WorldContext)
 {
 	UWorld* W = WorldContext ? WorldContext->GetWorld() : nullptr;
 	APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
-	return PC ? Cast<AMCStationCharacter>(PC->GetPawn()) : nullptr;
+	return PC ? Cast<AMCBayCharacter>(PC->GetPawn()) : nullptr;
 }
 
 bool UMCStationLibrary::AreRolesFree(UObject* WorldContext)
@@ -56,7 +56,7 @@ bool UMCStationLibrary::AreRolesFree(UObject* WorldContext)
 
 bool UMCStationLibrary::SendTransitAction(UObject* WorldContext, int32 Code)
 {
-	if (AMCStationCharacter* C = GetLocalStationPawn(WorldContext))
+	if (AMCBayCharacter* C = GetLocalStationPawn(WorldContext))
 	{
 		C->ServerTransitAction(Code);
 		return true;
@@ -72,7 +72,7 @@ int32 UMCStationLibrary::SeatAllPlayers(UObject* WorldContext)
 	for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
 	{
 		const APlayerController* PC = It->Get();
-		if (AMCStationCharacter* C = PC ? Cast<AMCStationCharacter>(PC->GetPawn()) : nullptr)
+		if (AMCBayCharacter* C = PC ? Cast<AMCBayCharacter>(PC->GetPawn()) : nullptr)
 		{
 			if (C->SeatAtOwnStation()) ++N;
 		}
@@ -87,7 +87,7 @@ void UMCStationLibrary::StandAllPlayers(UObject* WorldContext)
 	for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
 	{
 		const APlayerController* PC = It->Get();
-		if (AMCStationCharacter* C = PC ? Cast<AMCStationCharacter>(PC->GetPawn()) : nullptr) C->StandUp();
+		if (AMCBayCharacter* C = PC ? Cast<AMCBayCharacter>(PC->GetPawn()) : nullptr) C->StandUp();
 	}
 }
 

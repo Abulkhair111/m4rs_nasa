@@ -1,0 +1,13 @@
+# Credits (in-game credits text)
+- Launcher/capsule/habitat/dish/mission control/VAB models: NASA 3D Resources (public domain). No NASA endorsement implied.
+- SpaceX Falcon Heavy by Carwyn Pelley (Poly Pizza), CC-BY 3.0, https://creativecommons.org/licenses/by/3.0/ (MODIFIED: split into parts).
+- Space Base Bits (Drill, landers) by Kay Lousberg (Poly Pizza), CC0.
+- Kenney Space Kit, kenney.nl, CC0.
+- Quaternius, CC0.
+- Apollo LM / Nova-C and other lunar assets by Alex Maietta, CC0.
+- Poly Haven models (moon rocks, boulder, crates, toolbox, tanks, buoys), polyhaven.com, CC0.
+- ambientCG textures (Ground054, Concrete034, Foil/Metal sets), CC0.
+- Space Spheremaps (see SourceArt/SpaceSpheremaps/SOURCES.txt for author and licence).
+- NASA Black Marble 2016 and SVS 4720 LOLA height (public domain), NASA Blue Marble.
+- Itch.io pack with commercial-use licence: see SourceArt/*/SOURCES.txt (grep "itch").
+- Poly Pizza pass 2: "Command pod", "Mk12 command pod" by Poly by Google (CC-BY 3.0); "Container Ship" by Alex Safayan (CC-BY 3.0); "Energy Canister" by Nick Slough (CC-BY 3.0); "Lander A/B" by Kay Lousberg, "Helicopter" by kazuma, "Ship" by Kenney, "Cooler Box" by MilkAndBanana (all CC0). Via poly.pizza.

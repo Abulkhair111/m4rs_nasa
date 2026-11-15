@@ -82,6 +82,8 @@ namespace
 		return W ? W->GetTimeSeconds() : 0.0;
 	}
 
+	TOptional<FVector> GNextStart;
+
 	TSet<TWeakObjectPtr<AMCConstructionManager>>& BoundManagers()
 	{
 		static TSet<TWeakObjectPtr<AMCConstructionManager>> Set;
@@ -144,6 +146,9 @@ void AMCPartMover::HandlePlacementApproved(AMCPartSocket* Socket, UMCPartDef* De
 	Launch(Socket, Def, InRole, bHeavy);
 }
 
+void AMCPartMover::SetNextStart(const FVector& WorldLoc) { GNextStart = WorldLoc; }
+void AMCPartMover::ClearNextStart() { GNextStart.Reset(); }
+
 AMCPartMover* AMCPartMover::Launch(AMCPartSocket* Socket, UMCPartDef* Def, EMCCrewRole InRole, bool bHeavy)
 {
 	if (!Socket || !Def) return nullptr;
@@ -169,7 +174,14 @@ AMCPartMover* AMCPartMover::Launch(AMCPartSocket* Socket, UMCPartDef* Def, EMCCr
 		default: break;
 		}
 		bool bFound = false;
-		if (Needle)
+		if (GNextStart.IsSet())
+		{
+			// The player used a shelf part (AMCShelfPart): fly in from exactly there, longer trips take a bit longer.
+			Start = GNextStart.GetValue();
+			Dur = FMath::Clamp(FVector::Dist(Start, End) / 900.f, 1.4f, 3.2f);
+			bFound = true;
+		}
+		else if (Needle)
 		{
 			for (TActorIterator<AActor> It(World); It; ++It)
 			{

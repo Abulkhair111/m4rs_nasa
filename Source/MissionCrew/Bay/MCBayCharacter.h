@@ -25,6 +25,9 @@ class UMCPartPickerWidget;
 class UMCBayHudWidget;
 class UMCBayMenuWidget;
 class UMCBodyAnimComponent;
+class AMCStation;
+class AMCShelfPart;
+class UUserWidget;
 
 UCLASS(Blueprintable)
 class MISSIONCREW_API AMCBayCharacter : public ACharacter
@@ -41,6 +44,7 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
 	// ---- Config ----
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bay") TObjectPtr<UCameraComponent> Camera;
@@ -77,6 +81,17 @@ public:
 	/** Tool in hand (wrench = bolt, cable = grid). Set with ServerSetHeldTool (e.g. from a shelf Blueprint). */
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "Bay") EMCToolType HeldTool = EMCToolType::None;
 
+	/** Part picked up from a shelf (E on an AMCShelfPart). Local to this player. E on a compatible empty socket installs it. */
+	UPROPERTY(BlueprintReadOnly, Category = "Bay|Shelf") TObjectPtr<UMCPartDef> SelectedPart;
+	/** The shelf item SelectedPart came from (flight start point, pickup effect). */
+	UPROPERTY() TWeakObjectPtr<AMCShelfPart> SelectedFrom;
+
+	/** Select a part for installation (local). From may be null. */
+	UFUNCTION(BlueprintCallable, Category = "Bay|Shelf") void SelectPart(UMCPartDef* Def, AMCShelfPart* From);
+	UFUNCTION(BlueprintCallable, Category = "Bay|Shelf") void ClearSelection(bool bShowNote = true);
+	/** Short message under the aim prompt on the HUD (local). */
+	UFUNCTION(BlueprintCallable, Category = "Bay|Shelf") void ShowNotice(const FString& Text, float Seconds = 4.f);
+
 	// ---- API ----
 	/** CrewRole number of this player (0 = unassigned, everything allowed). Reads PlayerState "CrewRole" by reflection. */
 	UFUNCTION(BlueprintPure, Category = "Bay") int32 GetCrewRole() const;
@@ -89,6 +104,8 @@ public:
 	// ---- Server RPCs (no more 'set Run on Server by hand') ----
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerPlacePart(AMCPartSocket* Socket, UMCPartDef* Def);
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerInteract(AActor* Target);
+	/** Like ServerPlacePart, but the part flies in from From (the shelf item) when bHasFrom. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerPlacePartFrom(AMCPartSocket* Socket, UMCPartDef* Def, FVector From, bool bHasFrom);
 	/** Drop the held tool (G). Also ends any hold interaction. */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerRelease();
 	/** E released: ends a hold interaction (fuel pump). */
@@ -99,6 +116,38 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSwapPart(AMCPartSocket* Socket, UMCPartDef* Def);
 	/** Choose the launcher (index into the manager's Rockets). Drives SelectedLauncher, so every stack changes. */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Bay") void ServerSelectLauncher(int32 LeverIndex);
+
+	// ---- Stations (flight deck; moved here from AMCStationCharacter so the Blueprint bay pawn can sit and send console actions) ----
+	/** Station the player sits at (null = standing). Replicated. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Seat, Category = "Station") TObjectPtr<AMCStation> SeatedStation;
+	/** Station currently aimed at (local). Only set when nothing else (interactable / socket / stack) is aimed. */
+	UPROPERTY(BlueprintReadOnly, Category = "Station") TObjectPtr<AMCStation> AimedStation;
+	/** Optional Blueprint child of the transit HUD widget. Null = /Script/MissionCrew.MCTransitHudWidget. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Station|UI") TSubclassOf<UUserWidget> TransitHudClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Station") float ViewBlendTime = 0.5f;
+	/** Cone (cos of half angle) used to aim at a station. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Station") float StationAimCos = 0.8f;
+	/** If true, ServerTransitAction is ignored while the player is not seated (unless the manager has bFreeRoles). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Station") bool bRequireSeat = true;
+
+	UFUNCTION(BlueprintPure, Category = "Station") bool IsSeated() const { return SeatedStation != nullptr; }
+	/** Client -> server: sit at a station (validated: free, and own role unless bFreeRoles). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Station") void ServerSitAtStation(AMCStation* Station);
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Station") void ServerStandUp();
+	/** THE transit button entry point: client -> server, forwarded to AMCTransitManager::HandleAction(Code, CrewRole). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Transit") void ServerTransitAction(int32 Code);
+	/** SERVER ONLY: seat this player at the station of its own role (teleport + lock). Returns true on success. */
+	UFUNCTION(BlueprintCallable, Category = "Station") bool SeatAtOwnStation();
+	/** SERVER ONLY: seat at a given station (role check unless bIgnoreRole). */
+	UFUNCTION(BlueprintCallable, Category = "Station") bool SeatAt(AMCStation* Station, bool bIgnoreRole = false);
+	/** SERVER ONLY. */
+	UFUNCTION(BlueprintCallable, Category = "Station") void StandUp();
+	UFUNCTION() void OnRep_Seat(AMCStation* Previous);
+
+	/** Seated view: true = 3D flight chase camera (AMCFlightView), false = station camera. The Pilot starts with the flight view. Key V toggles. */
+	UPROPERTY(BlueprintReadOnly, Category = "Station") bool bFlightViewActive = false;
+	/** Local: toggle between the station camera and the flight chase camera while seated (needs an AMCFlightView in the level). */
+	UFUNCTION(BlueprintCallable, Category = "Station") void ToggleFlightView();
 
 	/** Server: a non-socket actor was interacted with (shelf, button, lever...). Handle it in a Blueprint child. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Bay") void BP_OnInteract(AActor* Target);
@@ -120,6 +169,22 @@ protected:
 	void OnCursorPressed();
 	void OnMenuPressed();
 
+	// stations
+	void BuildStationInput();
+	void AddStationMapping();
+	void OnStationInteract();
+	void OnStationEscape();
+	void OnStationViewToggle();
+	UPROPERTY() TObjectPtr<UInputAction> StationViewAction;
+	void UpdateStationAim();
+	void ApplySeatState(AMCStation* Previous);
+	void ShowTransitHud(bool bShow);
+	UPROPERTY() TObjectPtr<UInputMappingContext> StationMapping;
+	UPROPERTY() TObjectPtr<UInputAction> StationUseAction;
+	UPROPERTY() TObjectPtr<UInputAction> StationEscAction;
+	UPROPERTY() TObjectPtr<UUserWidget> TransitHud;
+	bool bStationRefused = false;
+
 	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
 	UPROPERTY() TObjectPtr<UMCBayMenuWidget> Menu;
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
@@ -133,6 +198,10 @@ protected:
 	/** Server: interactable currently held with E. Client: E is down on an interactable. */
 	UPROPERTY() TObjectPtr<AMCInteractable> ActiveInteractable;
 	bool bHoldingInteract = false;
+	void OnShelfPartPressed(AMCShelfPart* Part);
+	void PlaceSelected(AMCPartSocket* Socket);
+	FString NoticeText;
+	double NoticeUntil = 0.0;
 
 	UPROPERTY() TObjectPtr<UMCPartPickerWidget> Picker;
 	UPROPERTY() TObjectPtr<UMCBayHudWidget> Hud;

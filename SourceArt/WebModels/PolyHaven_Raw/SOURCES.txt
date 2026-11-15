@@ -1,0 +1,5 @@
+Poly Haven models (2k glTF + textures), https://polyhaven.com/models ; API https://api.polyhaven.com/files/<id>
+Licence: CC0 1.0. Credit not required (Poly Haven appreciated). Downloaded 2026-11-15, no login.
+Per-model folders: <id>/<id>.gltf (original), <id>/fbx/PH_<id>.fbx (+_tex, Blender 5.2 via Tools/WebModels/glb_to_fbx.py, Z up, 1 m = 100 uu, origin bottom-centre, textures max 1024).
+Models: moon_rock_01..07, boulder_01, metal_toolbox, plastic_crate_02, portable_generator, propane_tank, industrial_pastic_container, projector_screen, ocean_buoy, lifebuoy.
+Not converted (downloaded only): small_lpg_tank, industrial_microscope, chemistry_set, circuit_board, vintage_radio_transceiver, old_military_crate.

@@ -1,7 +1,39 @@
 # Ice Return MVP: Construction Phase (brief for the developer agent)
 
-**Status: DRAFT, 2026-11-14.** This file is not yet reconciled with `ROADMAP.md` or `Vault/Game Design.md`. Do not start building until the user confirms the decisions in §1.
+## CURRENT STATE (2026-11-15) — read this first; it overrides the older text below
 
+**Goal for the next 2 hours:** one playable loop on this PC (host + 1 client): host the bay → build the rocket → LAUNCH → `L_Transit` → auto-seat → fly (the Pilot's burns move a visible ship). S3–S6, briefings, summary and packaging are NOT in scope yet.
+
+**What changed since this brief was drafted**
+| Old text below | As built now |
+|---|---|
+| "DRAFT, do not start before §1 is confirmed" | §1 is answered and recorded in `Vault/Decisions.md`; S1 and S2 are built. |
+| §0.1 "Blueprint-only" | **C++ for the whole project** (user decision 2026-11-14). Code in `Source/MissionCrew/`; Blueprints only for assets, widget layout and the lobby/menu. |
+| §1 #2 roles assigned per submission | Each player keeps the same slot number. S1: 1 Power, 2 Construction, 3 Propulsion, 4 Science. S2: 1 Systems Operator, 2 Equipment Technician, 3 Pilot, 4 Science Operator. |
+| S2 in the same flow | S2 is its own map `L_Transit`, reached by `ServerTravel` ~4 s after LAUNCH. Loadout and roles carry over in `UMCMissionSubsystem`. |
+| §1 #8 / §6 "UMG-only, no 3D" | S1 is a 3D assembly bay; S2 has a 3D flight view (`AMCFlightView`, chase camera). 3D models only from NASA 3D, CC0 or CC-BY sources (listed in `SOURCES.txt` and `Vault/Asset Catalog.md`). The rule "don't make your own geometry" still holds. |
+| §2 `BP_MC_GameState`, `DT_*` tables | C++ classes: `AMCConstructionManager` (S1), `AMCTransitManager` (S2), data assets `UMCPartDef`, `UMCRocketPreset`, `UMCTransitConfig`. Numbers are placeholders; proposal in `Vault/Balance Proposal.md`. |
+
+**Status of milestones**
+| # | Milestone | Status |
+|---|---|---|
+| M0 | Decisions | Done (defaults used; five balance questions still open, see Balance Proposal) |
+| M2 | Lobby, roles | Lobby exists (old role names); does not yet start the bay |
+| M4 | S1 Design & Assembly | Built in C++, needs a hand playtest |
+| M5 | S2 Launch & Transit | Built in C++ (stations, HUD, flight view, sensor fault); never played |
+| M1, M3, M6–M12 | Data tables, briefings, S3–S6, summary, network test, packaging | Not started (S3 plan and packaging script drafted) |
+
+**Test checklist for the 2-hour goal (do in order)**
+1. Host `L_AssemblyBay` (PIE listen server + 1 client). Walk, jump, look at a shelf part: a prompt shows, E picks it up.
+2. Place a part on a socket (sockets sit at chest height); remove one; swap the launcher with the lever.
+3. Check the stat boards: all 10 checks readable; build a valid rocket.
+4. Press READY, then LAUNCH. After about 4 s both players land in `L_Transit`.
+5. Each player is auto-seated and sees the flight view (rocket + own controls, no crew in frame). V toggles the station camera.
+6. Pilot burns move the ship; Systems flips the sensor switch during the fault; the result board shows a score.
+
+---
+
+**Status: DRAFT, 2026-11-14.** This file is not yet reconciled with `ROADMAP.md` or `Vault/Game Design.md`. Do not start building until the user confirms the decisions in §1.
 "Construction phase" in this file means the build stage of the MVP. It does not mean the in-game 3D assembly bay (`Vault/construction_phase.md`), which already exists.
 
 ## 0. Read first

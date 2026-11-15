@@ -1,0 +1,3 @@
+PP_EnergyCanister - Poly Pizza, https://poly.pizza/m/3ohugtTcUR
+Author: Nick Slough, Licence: CC-BY 3.0. GLB downloaded without login.
+Converted with Tools/WebModels/glb_to_fbx.py (Blender 5.2).

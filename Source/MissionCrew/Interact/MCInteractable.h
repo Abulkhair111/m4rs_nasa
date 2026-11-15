@@ -71,6 +71,7 @@ class MISSIONCREW_API AMCReadyButton : public AMCInteractable
 	GENERATED_BODY()
 public:
 	AMCReadyButton();
+	virtual void Tick(float DeltaSeconds) override;
 	virtual FText GetPromptFor(const AMCBayCharacter* Who) const override;
 	virtual void Use(AMCBayCharacter* Who) override;
 };
@@ -82,6 +83,7 @@ class MISSIONCREW_API AMCLaunchButton : public AMCInteractable
 	GENERATED_BODY()
 public:
 	AMCLaunchButton();
+	virtual void Tick(float DeltaSeconds) override;
 	virtual FText GetPromptFor(const AMCBayCharacter* Who) const override;
 	virtual void Use(AMCBayCharacter* Who) override;
 };

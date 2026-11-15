@@ -1,0 +1,5 @@
+SpaceX Falcon Heavy - Poly Pizza, https://poly.pizza/m/bdMY5H0ds2T
+Author: Carwyn Pelley. Licence: CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/) - ATTRIBUTION REQUIRED: credit "SpaceX Falcon Heavy by Carwyn Pelley (Poly Pizza), CC-BY 3.0" in the game credits.
+Downloaded as GLB without login (static.poly.pizza). 36 untextured meshes, 4 plain materials, 24.7k tris. Model is stylised (engine skirts exaggerated; 1 model unit approx 7 real metres).
+Split with Tools/WebModels/split_falcon_heavy.py (Blender 5.2; whole objects only, no geometry edited) into fbx/: Falcon_Heavy_Full, Falcon_Stage1, Falcon_Fairing,
+Falcon_Core_Fairing, Falcon_SideBooster, Falcon_TankCore, Falcon_TankBooster. Z up, origin bottom-centre, 1 model unit = 1 m = 100 uu.

@@ -1,0 +1,3 @@
+Drill - Poly Pizza, https://poly.pizza/m/8uBbH7Dvmb
+Author: Kay Lousberg (Space Base Bits), Licence: CC0 1.0 (public domain). Downloaded as GLB without login.
+Converted with Tools/WebModels/glb_to_fbx.py (Blender 5.2), origin bottom-centre, 1 m = 100 uu, 1.75 x 1.75 x 2.0 m, 1.2k tris.

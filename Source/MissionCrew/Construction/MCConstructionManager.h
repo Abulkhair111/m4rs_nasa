@@ -37,6 +37,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bFreeRoles = true;
 	/** Server: StartPhase() on BeginPlay when the map name contains "AssemblyBay". Calling StartPhase again is harmless. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") bool bAutoStart = true;
+	/** After a successful launch: travel to the flight deck map (L_Transit). The S1 result goes through UMCMissionSubsystem. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config|Flow") bool bTravelToTransit = true;
+	/** Seconds between the launch ("Launching...") and the ServerTravel. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config|Flow") float TravelDelaySec = 4.f;
+	/** Package path of the deck map. Travel is skipped when this is the current map. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config|Flow") FString TransitMapName = TEXT("/Game/MissionCrew/Maps/L_Transit");
 	/** Rocket options (levers). Values are placeholders until the design doc fixes them. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config") TArray<FMCRocketDef> Rockets;
 	/** All selectable part definitions (tools excluded automatically by ToolType). */
@@ -154,6 +160,8 @@ protected:
 	void UpdateAlerts();
 	void OnSocketChanged();
 	void SetRocketFields(int32 Index);
+	void TravelToTransit();
+	FTimerHandle TravelTimer;
 
 	UPROPERTY() TArray<TObjectPtr<AMCPartSocket>> Sockets;
 	bool bYellowWarned = false;

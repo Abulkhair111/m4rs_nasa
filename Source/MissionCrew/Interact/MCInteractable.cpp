@@ -100,6 +100,8 @@ void AMCInteractable::Release(AMCBayCharacter* /*Who*/) {}
 
 AMCReadyButton::AMCReadyButton()
 {
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.2f;
 	Department = 1;
 	Prompt = FText::FromString(TEXT("Toggle READY"));
 	Label = TEXT("READY");
@@ -126,6 +128,8 @@ void AMCReadyButton::Use(AMCBayCharacter* Who)
 
 AMCLaunchButton::AMCLaunchButton()
 {
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.2f;
 	Department = 2;
 	Prompt = FText::FromString(TEXT("LAUNCH"));
 	Label = TEXT("LAUNCH");
@@ -304,4 +308,27 @@ void AMCToolStand::Use(AMCBayCharacter* Who)
 	if (Who->HeldTool != EMCToolType::None && M) M->Say(TEXT("Tool put back."));
 	Who->HeldTool = EMCToolType::None;
 	Super::Use(Who);
+}
+
+// ------------------------------------------------------------------ live status labels (every machine, from replicated state)
+
+void AMCReadyButton::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const AMCConstructionManager* M = GetManager();
+	if (!M || !LabelText) return;
+	const bool bOn = M->DeptReady.IsValidIndex(Department) && M->DeptReady[Department];
+	LabelText->SetText(FText::FromString(FString::Printf(TEXT("%s\n%s"), DepartmentName(Department), bOn ? TEXT("READY") : TEXT("NOT READY"))));
+	LabelText->SetTextRenderColor(bOn ? FColor(60, 255, 90) : FColor(255, 80, 60));
+}
+
+void AMCLaunchButton::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const AMCConstructionManager* M = GetManager();
+	if (!M || !LabelText) return;
+	int32 Ready = 0;
+	for (int32 d = 1; d < MCConst::NumRoles; ++d) if (M->DeptReady.IsValidIndex(d) && M->DeptReady[d]) ++Ready;
+	LabelText->SetText(FText::FromString(FString::Printf(TEXT("LAUNCH\nready %d/4"), Ready)));
+	LabelText->SetTextRenderColor(Ready >= 4 ? FColor(60, 255, 90) : FColor(255, 200, 60));
 }

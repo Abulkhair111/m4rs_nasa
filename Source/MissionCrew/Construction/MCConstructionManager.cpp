@@ -1,5 +1,10 @@
 #include "Construction/MCConstructionManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Construction/MCPartSocket.h"
+#include "Core/MCMissionSubsystem.h"
+#include "Misc/PackageName.h"
+#include "TimerManager.h"
 #include "Net/UnrealNetwork.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -97,6 +102,11 @@ void AMCConstructionManager::BeginPlay()
 		if (bAutoStart && !bActive && GetWorld() && GetWorld()->GetMapName().Contains(TEXT("AssemblyBay")))
 		{
 			StartPhase();
+		}
+		if (FParse::Param(FCommandLine::Get(), TEXT("MCLaunchTest")))
+		{
+			FTimerHandle TestH;
+			GetWorldTimerManager().SetTimer(TestH, FTimerDelegate::CreateWeakLambda(this, [this]() { TryLaunch(); }), 8.f, false);
 		}
 	}
 }
@@ -275,6 +285,8 @@ void AMCConstructionManager::StartPhase()
 {
 	if (!HasAuthority()) { return; }
 	DiscoverSockets();
+	if (UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this)) { Mission->Clear(); } // new round
+	GetWorldTimerManager().ClearTimer(TravelTimer);
 	bActive = true;
 	bLaunched = false;
 	bYellowWarned = false;
@@ -574,9 +586,11 @@ void AMCConstructionManager::RunPreflight()
 bool AMCConstructionManager::TryLaunch()
 {
 	if (!HasAuthority() || !bActive || bLaunched) { return false; }
+	// Test hook: -MCLaunchTest skips the READY and check gates so a headless bot can run the S1 -> S2 hand-off.
+	const bool bLaunchTest = FParse::Param(FCommandLine::Get(), TEXT("MCLaunchTest"));
 	for (int32 d = 1; d < MCConst::NumRoles; ++d)
 	{
-		if (!DeptReady[d]) { Say(FString::Printf(TEXT("%s is not READY."), RoleLabels[d])); return false; }
+		if (!bLaunchTest && !DeptReady[d]) { Say(FString::Printf(TEXT("%s is not READY."), RoleLabels[d])); return false; }
 	}
 	RunPreflight();
 
@@ -586,6 +600,7 @@ bool AMCConstructionManager::TryLaunch()
 		bRed |= (S == EMCCheckState::Red);
 		bYellow |= (S == EMCCheckState::Yellow);
 	}
+	if (bLaunchTest) { bRed = false; bYellow = false; }
 	if (bRed) { Say(TEXT("LAUNCH ABORTED: red checks remain.")); bYellowWarned = false; return false; }
 	if (bYellow && !bYellowWarned)
 	{
@@ -599,8 +614,34 @@ bool AMCConstructionManager::TryLaunch()
 	PhaseEndTime = 0.0;
 	Say(TEXT("LAUNCH!"));
 	UE_LOG(LogMissionCrew, Log, TEXT("Construction: launch complete, T/W %.2f, mass %.0f kg"), TWR, TotalMassKg);
-	OnLaunchComplete.Broadcast(BuildLoadout());
+	const FMCLoadout Result = BuildLoadout();
+	// Store the S1 result for the deck map (separate level) BEFORE listeners run.
+	if (UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this)) { Mission->RecordLaunch(this, Result); }
+	OnLaunchComplete.Broadcast(Result);
+
+	if (bTravelToTransit && !TransitMapName.IsEmpty() && GetWorld())
+	{
+		Say(TEXT("Launching..."));
+		GetWorldTimerManager().SetTimer(TravelTimer, this, &AMCConstructionManager::TravelToTransit, FMath::Max(0.1f, TravelDelaySec), false);
+	}
 	return true;
+}
+
+void AMCConstructionManager::TravelToTransit()
+{
+	UWorld* W = GetWorld();
+	if (!HasAuthority() || !W) { return; }
+	const FString Target = TransitMapName;
+	const FString Current = UWorld::RemovePIEPrefix(W->GetOutermost()->GetName());
+	if (Current == Target || FPackageName::GetShortName(Current) == FPackageName::GetShortName(Target))
+	{
+		UE_LOG(LogMissionCrew, Log, TEXT("Construction: already on %s, no travel"), *Target);
+		return;
+	}
+	FString URL = Target;
+	if (W->GetNetMode() == NM_ListenServer && !URL.Contains(TEXT("listen"))) { URL += TEXT("?listen"); }
+	UE_LOG(LogMissionCrew, Log, TEXT("Construction: ServerTravel to %s"), *URL);
+	W->ServerTravel(URL);
 }
 
 FMCLoadout AMCConstructionManager::BuildLoadout() const

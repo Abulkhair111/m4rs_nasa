@@ -1,0 +1,3 @@
+PP_LanderA - Poly Pizza, https://poly.pizza/m/TVASj3JcDO
+Author: Kay Lousberg, Licence: CC0 1.0. GLB downloaded without login.
+Converted with Tools/WebModels/glb_to_fbx.py (Blender 5.2).

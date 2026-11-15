@@ -49,15 +49,19 @@ void UMCBayHudWidget::BuildFallbackLayout()
 
 	PromptText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PromptText"));
 	FSlateFontInfo F = PromptText->GetFont();
-	F.Size = 18;
+	F.Size = 24;
 	PromptText->SetFont(F);
 	PromptText->SetJustification(ETextJustify::Center);
+	PromptText->SetAutoWrapText(true);
+	PromptText->SetShadowOffset(FVector2D(2.f, 2.f));
+	PromptText->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.9f));
 	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(PromptText))
 	{
-		S->SetAnchors(FAnchors(0.5f, 0.78f));
+		S->SetAnchors(FAnchors(0.5f, 0.62f));
 		S->SetAlignment(FVector2D(0.5f, 0.f));
 		S->SetPosition(FVector2D::ZeroVector);
-		S->SetAutoSize(true);
+		S->SetAutoSize(false);
+		S->SetSize(FVector2D(1000.f, 320.f));
 	}
 
 	HintText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HintText"));

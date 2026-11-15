@@ -1,5 +1,11 @@
 #include "Transit/MCTransitManager.h"
 #include "Construction/MCConstructionManager.h"
+#include "Core/MCMissionSubsystem.h"
+#include "Bay/MCBayCharacter.h"
+#include "TimerManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "GameFramework/PlayerController.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
@@ -106,6 +112,10 @@ void AMCTransitManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AMCTransitManager, RoleBad);
 	DOREPLIFETIME(AMCTransitManager, ReportText);
 	DOREPLIFETIME(AMCTransitManager, bDisplayStale);
+	DOREPLIFETIME(AMCTransitManager, ShipErrX);
+	DOREPLIFETIME(AMCTransitManager, ShipErrY);
+	DOREPLIFETIME(AMCTransitManager, PulseSeq);
+	DOREPLIFETIME(AMCTransitManager, LastPulseDir);
 }
 
 const UMCTransitConfig& AMCTransitManager::Cfg() const
@@ -139,7 +149,9 @@ void AMCTransitManager::BeginPlay()
 	const FString MapName = GetWorld() ? GetWorld()->GetMapName() : FString();
 	if (bStartOnBeginPlay || MapName.Contains(TEXT("L_Transit")))
 	{
-		bTestMode = true;
+		// The S1 result comes from UMCMissionSubsystem when we travelled here from the bay; else the test loadout.
+		const UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this);
+		if (!(Mission && Mission->bHasLoadout)) { bTestMode = true; }
 		BeginTransit();
 		return;
 	}
@@ -170,7 +182,9 @@ void AMCTransitManager::BeginTransit()
 	if (bDebugAutoTest) { bFreeRoles = true; }
 	if (!ConsMgr) { FindConstructionManager(); }
 
-	LoadLoadout(bTestMode || !ConsMgr || !ConsMgr->bLaunched);
+	const UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this);
+	const bool bHaveS1 = (Mission && Mission->bHasLoadout) || (ConsMgr && ConsMgr->bLaunched);
+	LoadLoadout(bTestMode || !bHaveS1);
 	InitData();
 	bStarted = true;
 	SetStage(EMCTransitStage::GoPoll, 0.f);
@@ -178,6 +192,42 @@ void AMCTransitManager::BeginTransit()
 	UE_LOG(LogMissionCrew, Log, TEXT("Transit: begin, seed %d, %d devices, %d instruments, fuel %.0f kg"),
 		Seed, Devices.Num(), Instruments.Num(), FuelKg);
 	if (bDebugAutoTest && !bDebugBot) { RunDebugTest(); }
+
+	if (bAutoSeat && GetWorld())
+	{
+		SeatElapsed = 0.f;
+		AutoSeated.Reset();
+		GetWorldTimerManager().SetTimer(SeatTimer, this, &AMCTransitManager::AutoSeatTick, 1.f, true, FMath::Max(0.1f, SeatDelaySec));
+	}
+}
+
+void AMCTransitManager::AutoSeatTick()
+{
+	UWorld* W = GetWorld();
+	if (!W) { return; }
+	SeatElapsed += 1.f;
+
+	// Roles first: non-seamless travel makes new PlayerStates, CrewRole is back at its default.
+	if (UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this)) { Mission->ApplyRoles(W); }
+
+	int32 Players = 0, Seated = 0;
+	for (FConstPlayerControllerIterator It = W->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* PC = It->Get();
+		if (!PC) { continue; }
+		++Players;
+		AMCBayCharacter* Pawn = Cast<AMCBayCharacter>(PC->GetPawn());
+		if (!Pawn) { continue; }
+		const TWeakObjectPtr<APawn> Key(Pawn);
+		if (AutoSeated.Contains(Key) || Pawn->IsSeated()) { ++Seated; continue; } // seat each pawn once; a player who stood up stays up
+		if (Pawn->GetCrewRole() <= 0 && !bFreeRoles) { continue; }                // role not known yet (PlayerState still replicating)
+		if (Pawn->SeatAtOwnStation()) { AutoSeated.Add(Key); ++Seated; }
+	}
+	if ((Players > 0 && Seated >= Players) || SeatElapsed >= SeatRetrySec)
+	{
+		GetWorldTimerManager().ClearTimer(SeatTimer);
+		UE_LOG(LogMissionCrew, Log, TEXT("Transit: auto-seat finished, %d of %d players seated"), Seated, Players);
+	}
 }
 
 void AMCTransitManager::LoadLoadout(bool bUseDefault)
@@ -191,13 +241,25 @@ void AMCTransitManager::LoadLoadout(bool bUseDefault)
 	bool bRover = false, bDrill = false, bLidar = false;
 	TArray<FString> InstNames;
 
-	if (!bUseDefault && ConsMgr)
+	// Source priority: 1) UMCMissionSubsystem (survives the map change), 2) a launched AMCConstructionManager in this world, 3) test loadout.
+	const UMCMissionSubsystem* Mission = UMCMissionSubsystem::Get(this);
+	const bool bFromSub = Mission && Mission->bHasLoadout;
+	if (!bUseDefault && (bFromSub || ConsMgr))
 	{
-		Loadout = ConsMgr->BuildLoadout();
+		if (bFromSub)
+		{
+			Loadout = Mission->Loadout;
+			LaunchReliability = Mission->LaunchReliability;
+			FuelReserveKg = C.LandingReserveFrac * Mission->FuelRequiredKg;
+		}
+		else
+		{
+			Loadout = ConsMgr->BuildLoadout();
+			LaunchReliability = FMath::Clamp(ConsMgr->RocketReliability > 0.f ? ConsMgr->RocketReliability : 1.f, 0.f, 1.f);
+			FuelReserveKg = C.LandingReserveFrac * ConsMgr->FuelRequiredKg;
+		}
 		bHaveLoadout = true;
 		FuelStartKg = Loadout.FuelKg;
-		LaunchReliability = FMath::Clamp(ConsMgr->RocketReliability > 0.f ? ConsMgr->RocketReliability : 1.f, 0.f, 1.f);
-		FuelReserveKg = C.LandingReserveFrac * ConsMgr->FuelRequiredKg;
 		for (const FMCLoadoutEntry& E : Loadout.Parts)
 		{
 			switch (E.SocketType)
@@ -434,6 +496,7 @@ void AMCTransitManager::RefreshDisplay()
 	const bool bNavB = Switches.IsValidIndex(1) && Switches[1].bOn;
 	const bool bStale = bFaultHappened && !bNavB;
 	bDisplayStale = bStale;
+	ShipErrX = ErrX; ShipErrY = ErrY; // flight view: the true miss drives the 3D ship
 	if (!bStale)
 	{
 		StaleX = ErrX; StaleY = ErrY;
@@ -619,6 +682,7 @@ bool AMCTransitManager::DoPilot(int32 Act)
 	}
 	FuelKg -= Cost;
 	Windows[W].Pulses++;
+	LastPulseDir = Act; ++PulseSeq; // flight view: flare + RCS puff
 	Score(3, GetTrueMiss() < Before);
 	RefreshDisplay();
 	return true;
@@ -884,7 +948,22 @@ void AMCTransitManager::Arrive()
 	DebugLog(FString::Printf(TEXT("DONE score=%d miss=%.1f inCorridor=%d fuel=%.0f health=%.0f instr=%d/%d dev=%d/%d"),
 		R.Score, Miss, bIn ? 1 : 0, FuelKg, Health, R.InstrumentsCalibrated, R.InstrumentsTotal, R.DevicesPassed, R.DevicesTotal));
 	RebuildStrings();
+	if (UMCMissionSubsystem* Mis = UMCMissionSubsystem::Get(this)) { Mis->RecordTransit(Result); }
 	OnTransitComplete.Broadcast(Result);
+	if (HasAuthority() && !NextMapName.IsEmpty() && (!bDebugAutoTest || FParse::Param(FCommandLine::Get(), TEXT("MCTravelTest"))) && GetWorld())
+	{
+		FTimerHandle H;
+		GetWorld()->GetTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (UWorld* W = GetWorld())
+			{
+				FString URL = NextMapName;
+				if (GetNetMode() == NM_ListenServer && !URL.Contains(TEXT("listen"))) URL += TEXT("?listen");
+				UE_LOG(LogMissionCrew, Log, TEXT("Transit: ServerTravel to %s"), *URL);
+				W->ServerTravel(URL);
+			}
+		}), FMath::Max(1.f, TravelDelaySec), false);
+	}
 }
 
 // ------------------------------------------------------------------ strings

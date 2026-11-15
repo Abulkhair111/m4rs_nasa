@@ -8,7 +8,7 @@ public class MissionCrew : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"UMG", "Slate", "SlateCore", "NetCore"
+			"UMG", "Slate", "SlateCore", "NetCore", "CoreOnline"
 		});
 		PublicIncludePaths.Add(ModuleDirectory);
 	}
